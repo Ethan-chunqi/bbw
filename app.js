@@ -180,9 +180,15 @@
       form.reset();
       title.focus();
     } catch (error) {
-      errorNote.textContent = [400, 422].includes(error.status)
-        ? '请核对英文姓名、邮箱及两项授权后再次提交。'
-        : '暂时无法确认提交结果。请保留本页，使用相同资料再次提交，即可核对这份申请。';
+      const messages = {
+        400: '请核对英文姓名、邮箱及两项授权后再次提交。',
+        422: '请核对英文姓名、邮箱及两项授权后再次提交。',
+        409: '该邮箱或邀请已有申请记录。请打开先前保存的进度链接。如需更正资料，请联系 UXUY。',
+        410: '本次赠票申请已截止。如需核实，请联系 UXUY。',
+        429: '提交过于频繁。请先保留本页，稍后再试。'
+      };
+      errorNote.textContent = messages[error.status]
+        || '暂时无法确认提交结果。请保留本页，使用相同资料再次提交，即可核对这份申请。';
       errorNote.hidden = false;
     } finally {
       busy = false;
