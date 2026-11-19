@@ -3,6 +3,21 @@
 (() => {
   const get = id => document.getElementById(id);
   const form = get('registration');
+  const progress = get('application-progress');
+  if (!progress || !form.elements.firstName || !form.elements.lastName) {
+    const fresh = new URL(location.href);
+    if (fresh.searchParams.get('form') !== 'vip-20261119') {
+      fresh.searchParams.set('form', 'vip-20261119');
+      location.replace(fresh.href);
+    } else {
+      get('form-error').textContent = '页面版本尚未更新，请稍后刷新本页。';
+      get('form-error').hidden = false;
+    }
+    return;
+  }
+  const bar = get('progress-bar');
+  const percent = get('progress-percent');
+  const steps = [...get('progress-steps').children];
   const card = get('status-card');
   const title = get('status-title');
   const description = get('status-description');
@@ -23,8 +38,11 @@
     queued: ['审核已通过', '你的报名资料已进入领票办理队列。'],
     processing: ['正在办理领票', 'UXUY 正在为你办理活动报名和领票。'],
     review: ['等待人工核对', '办理过程中需要 UXUY 核对资料，请稍后查看进度。'],
-    issued: ['已完成领票', '请留意报名邮箱。入场二维码将由活动方在临近活动时发送。'],
+    issued: ['已完成领票', '请查看你填写的报名邮箱，留意活动方的确认邮件。入场二维码可能临近活动时另行发送。'],
     closed: ['邀请已关闭', '如需了解具体情况，请联系发出邀请的 UXUY 工作人员。']
+  };
+  const milestones = {
+    pending: 1, declined: 1, approved: 2, queued: 2, processing: 2, review: 2, issued: 3
   };
   const activeStates = new Set(['pending', 'approved', 'queued', 'processing', 'review']);
   let state = 'initial';
@@ -74,6 +92,23 @@
     } finally { clearTimeout(timeout); }
   }
 
+  function updateProgress(knownState) {
+    const completed = milestones[knownState];
+    progress.hidden = completed === undefined;
+    if (progress.hidden) return;
+    const value = Math.round(100 * completed / steps.length) + '%';
+    bar.value = completed;
+    percent.textContent = value;
+    bar.textContent = value;
+    const caption = states[knownState]?.[0] || '尚未提交申请';
+    bar.setAttribute('aria-valuetext', '已完成 ' + completed + '/' + steps.length + ' 步，' + caption);
+    steps.forEach((step, index) => {
+      step.classList.toggle('done', index < completed);
+      if (index === completed && knownState !== 'declined') step.setAttribute('aria-current', 'step');
+      else step.removeAttribute('aria-current');
+    });
+  }
+
   function showForm() {
     state = 'available';
     clearTimeout(timer);
@@ -85,6 +120,7 @@
   function showStatus(heading, detail, retry = false, personal = false) {
     clearTimeout(timer);
     form.hidden = true;
+    updateProgress(personal ? state : undefined);
     card.hidden = false;
     title.textContent = heading;
     description.textContent = detail;
@@ -147,6 +183,13 @@
 
   form.addEventListener('input', event => {
     if (event.target.setCustomValidity) event.target.setCustomValidity('');
+    if (['firstName', 'lastName'].includes(event.target.name)) {
+      const fields = form.elements;
+      fields.firstName.setCustomValidity('');
+      fields.lastName.setCustomValidity('');
+      fields.badgeName.placeholder = [fields.firstName.value, fields.lastName.value]
+        .map(value => value.trim()).filter(Boolean).join(' ') || '默认使用英文全名';
+    }
     errorNote.hidden = true;
   });
 
@@ -154,14 +197,25 @@
     event.preventDefault();
     if (busy || state !== 'available') return;
     const fields = form.elements;
-    const fullName = fields.fullName.value.trim();
-    if (!fullName) {
-      fields.fullName.setCustomValidity('请输入英文全名。');
-      fields.fullName.reportValidity();
+    for (const field of [fields.lastName, fields.firstName, fields.badgeName]) {
+      if (/\p{Cc}|\p{Cf}/u.test(field.value) || (field.required && !field.value.trim())) {
+        field.setCustomValidity('请填写姓名，并移除不可见字符。');
+        field.reportValidity();
+        return;
+      }
+    }
+    const normalize = value => value.trim().replace(/\s+/gu, ' ');
+    const firstName = normalize(fields.firstName.value);
+    const lastName = normalize(fields.lastName.value);
+    const fullName = firstName + ' ' + lastName;
+    if (fullName.length > 200) {
+      fields.firstName.setCustomValidity('英文姓名合计最多可填写 200 个字符。');
+      fields.firstName.reportValidity();
       return;
     }
     const attendee = {
-      fullName, email: fields.email.value.trim(),
+      firstName, lastName, fullName, badgeName: normalize(fields.badgeName.value) || fullName,
+      email: fields.email.value.trim(),
       consentPhoto: fields.consentPhoto.checked, consentData: fields.consentData.checked
     };
     if (!requestId) { requestId = crypto.randomUUID(); remember(requestKey, requestId); }

@@ -7,10 +7,10 @@
   <meta name="robots" content="noindex,nofollow">
   <meta name="color-scheme" content="light">
   <meta name="theme-color" content="#0d0e0f">
-  <title>UXUY 嘉宾赠票 · 2026 曼谷币安区块链周</title>
+  <title>UXUY VIP 嘉宾赠票 · 2026 曼谷币安区块链周</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20width%3D%221024%22%20height%3D%221024%22%20viewBox%3D%220%200%201024%201024%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20width%3D%221024%22%20height%3D%221024%22%20fill%3D%22black%22%2F%3E%0A%3Cpath%20d%3D%22M362.3%20226.976L175%20226.976L417%20514.244L175.141%20802H363.229L604.607%20514.31L362.3%20226.976Z%22%20fill%3D%22%23FE4200%22%2F%3E%0A%3Cpath%20d%3D%22M622.502%20535.553L847.304%20801.768L659.216%20801.768L528.65%20646.779L622.502%20535.553Z%22%20fill%3D%22%23FE4200%22%2F%3E%0A%3Cpath%20d%3D%22M622.568%20492.99L528.533%20381.547L709.7%20166H897L622.568%20492.99Z%22%20fill%3D%22%23FE4200%22%2F%3E%0A%3C%2Fsvg%3E">
-  <link rel="stylesheet" href="./styles.css?v=uxuy-20261119">
-  <script defer src="./app.js"></script>
+  <link rel="stylesheet" href="./styles.css?v=vip-20261119">
+  <script defer src="./app.js?v=vip-20261119"></script>
 </head>
 <body>
   <header class="masthead">
@@ -25,7 +25,7 @@
   <path d="M99.495 6.3564H106L91.9823 40H85.2942L99.495 6.3564Z" fill="white" />
   <path d="M92.6936 19.8075L87.035 6.3564H80.4384L89.4211 27.4994L92.6936 19.8075Z" fill="white" />
 </svg>
-        <span class="event-name">嘉宾邀请</span>
+        <span class="event-name">VIP 嘉宾邀请</span>
       </div>
       <span class="edition" lang="en">BANGKOK 2026</span>
     </div>
@@ -33,18 +33,18 @@
   <main class="page-layout">
     <aside class="event-panel" aria-labelledby="event-title">
       <div class="event-content">
-        <p class="event-kicker">2026 币安区块链周</p>
+        <p class="event-kicker">2026 币安区块链周 · 曼谷站</p>
         <div class="cover-title">
-          <h1 id="event-title">曼谷站<br>嘉宾赠票</h1>
+          <h1 id="event-title"><span lang="en">UXUY VIP</span><br> 嘉宾赠票</h1>
           <svg class="ticket-mark" viewBox="150 145 765 680" fill="none" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg"><path d="M362.3 226.976L175 226.976L417 514.244L175.141 802H363.229L604.607 514.31L362.3 226.976Z" fill="#FE4200"/><path d="M622.502 535.553L847.304 801.768L659.216 801.768L528.65 646.779L622.502 535.553Z" fill="#FE4200"/><path d="M622.568 492.99L528.533 381.547L709.7 166H897L622.568 492.99Z" fill="#FE4200"/></svg>
         </div>
-        <p class="event-intro">UXUY 邀请你参加曼谷站币安区块链周。申请通过后，我们将代你完成报名和领票。</p>
+        <p class="event-intro">欢迎成为 UXUY VIP 嘉宾。提交资料并通过审核后，UXUY 将代你办理本次活动的报名和领票。</p>
       </div>
       <div class="ticket-stub">
         <dl class="event-details">
           <div><dt>活动日期</dt><dd><time datetime="2026-11-28">11 月 28 日</time> 至 <time datetime="2026-11-29">29 日</time></dd></div>
           <div><dt>活动地点</dt><dd>泰国 · 曼谷</dd></div>
-          <div><dt>邀请票种</dt><dd>普通入场票 <span lang="en">GA</span></dd></div>
+          <div><dt>邀请票种</dt><dd>UXUY VIP 嘉宾赠票<small class="official-ticket">官方入场票种为普通入场票（GA）</small></dd></div>
         </dl>
       </div>
       <nav class="event-links" aria-label="活动官方链接">
@@ -59,6 +59,14 @@
         <p class="status-label">登记状态</p>
         <h2 id="status-title" tabindex="-1">正在核对邀请</h2>
         <p id="status-description" role="status" aria-live="polite">请稍候。</p>
+        <section class="progress-panel" id="application-progress" aria-label="赠票办理流程" hidden>
+          <div class="progress-label"><label for="progress-bar">办理进度</label><span id="progress-percent" aria-hidden="true">0%</span></div>
+          <progress id="progress-bar" max="3" value="0" aria-valuetext="尚未提交申请">0%</progress>
+          <ol id="progress-steps" class="progress-steps">
+            <li>提交申请</li><li>后台审核</li><li>发放门票</li>
+          </ol>
+        </section>
+
         <p id="order" hidden>订单号 <span id="order-id"></span></p>
         <div id="status-link-row" hidden>
           <button type="button" class="secondary" id="copy-link">复制我的进度链接</button>
@@ -70,19 +78,26 @@
       </section>
       <form id="registration" method="post">
         <div class="form-heading">
-          <h2>申请赠票</h2>
-          <p>填写你的英文姓名和收票邮箱。</p>
+          <h2>申请嘉宾赠票</h2>
+          <p>请按参会证件填写英文姓名或拼音。</p>
         </div>
 
         <fieldset>
           <legend>参会者资料</legend>
           <div class="fields-grid">
-            <label>英文全名（名在前，姓在后）
-              <input name="fullName" autocomplete="name" placeholder="例如 Xiaoming Wang" maxlength="200" required>
+            <label>姓（英文或拼音）
+              <input name="lastName" autocomplete="family-name" spellcheck="false" placeholder="例如 Wang" maxlength="200" required>
             </label>
-            <label>本人收票邮箱
+            <label>名（英文或拼音）
+              <input name="firstName" autocomplete="given-name" spellcheck="false" placeholder="例如 Ming" maxlength="200" required>
+            </label>
+            <label class="full-width">胸牌显示名（选填）
+              <input name="badgeName" autocomplete="nickname" placeholder="默认使用英文全名" maxlength="200" aria-describedby="badge-hint">
+              <small id="badge-hint">留空时，胸牌将显示你的英文全名（名在前，姓在后）。</small>
+            </label>
+            <label class="full-width">本人收票邮箱
               <input name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="name@example.com" maxlength="254" aria-describedby="email-hint" required>
-              <small id="email-hint">请核对拼写。活动方建议使用与币安账户未绑定的邮箱。</small>
+              <small id="email-hint">入场凭证将发到这个邮箱，请确保邮箱填写正确。</small>
             </label>
           </div>
         </fieldset>
