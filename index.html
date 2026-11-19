@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="referrer" content="no-referrer">
+  <meta name="robots" content="noindex,nofollow">
+  <meta name="color-scheme" content="light">
+  <meta name="theme-color" content="#083f4d">
+  <title>曼谷站赠票登记 · 币安区块链周 2026</title>
+  <link rel="stylesheet" href="./styles.css">
+  <script defer src="./app.js"></script>
+</head>
+<body>
+  <header class="masthead">
+    <div class="masthead-inner">
+      <span lang="en" class="event-name">Binance Blockchain Week</span>
+      <span class="edition" lang="en">BANGKOK 2026</span>
+    </div>
+  </header>
+  <main class="page-layout">
+    <aside class="event-panel" aria-labelledby="event-title">
+      <div class="event-content">
+        <p class="event-kicker">2026 币安区块链周</p>
+        <h1 id="event-title">曼谷站<br>赠票登记</h1>
+        <p class="event-intro">向 UXUY 申请一张普通入场票。审核通过后，UXUY 将代你办理官网报名和领票。</p>
+        <dl class="event-details">
+          <div><dt>活动日期</dt><dd><time datetime="2026-11-28">11 月 28 日</time> 至 <time datetime="2026-11-29">29 日</time></dd></div>
+          <div><dt>活动地点</dt><dd>泰国 · 曼谷</dd></div>
+          <div><dt>邀请票种</dt><dd>普通入场票 <span lang="en">GA</span></dd></div>
+        </dl>
+      </div>
+      <nav class="event-links" aria-label="活动官方链接">
+        <a href="https://www.binanceblockchainweek.com/event/Bangkok2026/register" target="_blank" rel="noopener noreferrer">BBW 活动报名页</a>
+        <a href="https://app.moongate.id/e/binance-blockchain-week-2026" target="_blank" rel="noopener noreferrer">Moongate 票务页</a>
+      </nav>
+    </aside>
+
+    <section class="workspace" aria-label="赠票登记">
+      <noscript><p class="notice">请在浏览器中启用 JavaScript 后重新打开本页。</p></noscript>
+      <section id="status-card" class="status-card" hidden>
+        <p class="status-label">登记状态</p>
+        <h2 id="status-title" tabindex="-1">正在核对邀请</h2>
+        <p id="status-description" role="status" aria-live="polite">请稍候。</p>
+        <p id="order" hidden>订单号 <span id="order-id"></span></p>
+        <div id="status-link-row" hidden>
+          <button type="button" class="secondary" id="copy-link">复制我的进度链接</button>
+          <p id="copy-result" class="hint" role="status">请保存此链接，仅供本人查看。</p>
+          <p id="manual-link" hidden><a id="status-link" target="_blank" rel="noopener noreferrer">我的进度链接</a></p>
+        </div>
+        <button type="button" class="secondary" id="refresh" hidden>刷新进度</button>
+        <p id="status-update" class="hint" role="status"></p>
+      </section>
+      <form id="registration" method="post">
+        <div class="form-heading">
+          <h2>申请赠票</h2>
+          <p>请填写你希望用于活动报名的英文姓名和收票邮箱。</p>
+        </div>
+
+        <fieldset>
+          <legend>参会者资料</legend>
+          <div class="fields-grid">
+            <label>英文全名（名在前，姓在后）
+              <input name="fullName" autocomplete="name" placeholder="例如 Xiaoming Wang" maxlength="200" required>
+            </label>
+            <label>本人收票邮箱
+              <input name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="name@example.com" maxlength="254" aria-describedby="email-hint" required>
+              <small id="email-hint">请核对拼写。活动方建议使用与币安账户未绑定的邮箱。</small>
+            </label>
+          </div>
+        </fieldset>
+
+        <fieldset class="consents">
+          <legend>确认与授权</legend>
+          <label class="consent-row">
+            <input type="checkbox" name="consentPhoto" required>
+            <span>我同意活动期间由币安拍摄照片和视频，并允许币安将包含本人影像的照片或视频用于网站、社交媒体等公开宣传。</span>
+          </label>
+          <label class="consent-row">
+            <input type="checkbox" name="consentData" required>
+            <span>我同意 UXUY 保存我的申请资料，审核通过后代我向 BBW 和 Moongate 提交报名并办理领票。我知悉币安按<a href="https://www.binance.com/en/privacy" target="_blank" rel="noopener noreferrer">隐私声明</a>处理活动资料并发送活动通知和会后调查。我已阅读并同意 Moongate 的<a href="https://themoongate.notion.site/Moongate-Terms-of-Sale-00f0e9cce59b4eedb1389b059b2ce988" target="_blank" rel="noopener noreferrer">售票条款</a>及<a href="https://themoongate.notion.site/Moongate-Privacy-f4f35ff31d98430680b5453441dc3d18" target="_blank" rel="noopener noreferrer">隐私政策</a>，授权 UXUY 代我确认这些必选项。</span>
+          </label>
+        </fieldset>
+
+        <div class="form-bottom">
+          <p id="form-error" role="alert" class="form-error" hidden></p>
+          <button type="submit" id="submit" class="primary" disabled>提交申请</button>
+          <p class="hint">提交后可保存进度链接，随时查看审核和领票状态。</p>
+        </div>
+      </form>
+    </section>
+  </main>
+</body>
+</html>
