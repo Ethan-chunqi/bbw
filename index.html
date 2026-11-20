@@ -9,8 +9,8 @@
   <meta name="theme-color" content="#0d0e0f">
   <title>UXUY VIP 嘉宾赠票 · 2026 曼谷币安区块链周</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20width%3D%221024%22%20height%3D%221024%22%20viewBox%3D%220%200%201024%201024%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20width%3D%221024%22%20height%3D%221024%22%20fill%3D%22black%22%2F%3E%0A%3Cpath%20d%3D%22M362.3%20226.976L175%20226.976L417%20514.244L175.141%20802H363.229L604.607%20514.31L362.3%20226.976Z%22%20fill%3D%22%23FE4200%22%2F%3E%0A%3Cpath%20d%3D%22M622.502%20535.553L847.304%20801.768L659.216%20801.768L528.65%20646.779L622.502%20535.553Z%22%20fill%3D%22%23FE4200%22%2F%3E%0A%3Cpath%20d%3D%22M622.568%20492.99L528.533%20381.547L709.7%20166H897L622.568%20492.99Z%22%20fill%3D%22%23FE4200%22%2F%3E%0A%3C%2Fsvg%3E">
-  <link rel="stylesheet" href="./styles.css?v=vip-20261119">
-  <script defer src="./app.js?v=vip-20261119"></script>
+  <link rel="stylesheet" href="./styles.css?v=batch-20261120">
+  <script defer src="./app.js?v=batch-20261120"></script>
 </head>
 <body>
   <header class="masthead">
@@ -76,6 +76,10 @@
         <button type="button" class="secondary" id="refresh" hidden>刷新进度</button>
         <p id="status-update" class="hint" role="status"></p>
       </section>
+      <nav id="entry-modes" class="entry-modes" aria-label="申请方式" hidden>
+        <a id="single-mode" href="?" aria-current="page">单人申请</a>
+        <a id="batch-mode" href="?mode=batch">批量提交</a>
+      </nav>
       <form id="registration" method="post">
         <div class="form-heading">
           <h2>申请嘉宾赠票</h2>
@@ -120,6 +124,43 @@
           <p class="hint">提交后可保存进度链接，随时查看审核和领票状态。</p>
         </div>
       </form>
+      <form id="batch-form" method="post" hidden>
+        <div class="form-heading">
+          <h2>批量提交嘉宾名单</h2>
+          <p>每人一行，每次最多 60 人。每位嘉宾分别审核，票务邮件发到各自的邮箱。</p>
+        </div>
+        <label for="batch-paste" class="field-title">粘贴名单</label>
+        <p id="batch-guide" class="hint">从 Excel 依次复制「姓、名、收票邮箱、胸牌显示名」四列。胸牌名可以留空，默认显示「名 姓」。手动输入时用英文逗号分隔。</p>
+        <textarea id="batch-paste" rows="5" aria-describedby="batch-guide" spellcheck="false" autocapitalize="none" placeholder="Wang,Ming,ming@example.com&#10;Li,Xin,xin@example.com,Xin" required></textarea>
+        <p id="batch-input-error" class="form-error" role="alert" hidden></p>
+        <section id="batch-preview" class="batch-preview" aria-labelledby="preview-title" hidden>
+          <h3 id="preview-title"></h3>
+          <ul class="people-list" id="preview-rows"></ul>
+        </section>
+        <fieldset class="consents">
+          <legend>代办确认与授权</legend>
+          <label class="consent-row">
+            <input id="batch-photo" type="checkbox" required>
+            <span>我已向名单内每位嘉宾确认，他们均同意币安在活动期间拍摄影像，并用于网站、社交媒体等公开宣传。</span>
+          </label>
+          <label class="consent-row">
+            <input id="batch-data" type="checkbox" required>
+            <span>每位嘉宾均已授权我代为提交，并同意 UXUY 保存资料、代办 BBW 报名及 Moongate 领票。他们知悉币安按<a href="https://www.binance.com/en/privacy" target="_blank" rel="noopener noreferrer">隐私声明</a>处理资料及发送活动通知和会后调查，已同意 Moongate <a href="https://themoongate.notion.site/Moongate-Terms-of-Sale-00f0e9cce59b4eedb1389b059b2ce988" target="_blank" rel="noopener noreferrer">售票条款</a>和<a href="https://themoongate.notion.site/Moongate-Privacy-f4f35ff31d98430680b5453441dc3d18" target="_blank" rel="noopener noreferrer">隐私政策</a>。</span>
+          </label>
+        </fieldset>
+        <div class="form-bottom">
+          <p id="batch-error" role="alert" class="form-error" hidden></p>
+          <button class="primary" type="submit" id="batch-submit">批量提交申请</button>
+        </div>
+      </form>
+      <section id="batch-result" class="status-card" hidden>
+        <h2 id="batch-result-title" tabindex="-1"></h2>
+        <p>每人有独立进度链接，请只发给对应嘉宾。开始下一批前，请先保存这些链接。</p>
+        <ul class="people-list" id="result-rows"></ul>
+        <p id="batch-copy-note" class="hint" role="status"></p>
+        <button type="button" id="copy-batch" class="secondary">复制全部链接（内部留存）</button>
+        <button type="button" id="batch-next" class="secondary">提交下一批</button>
+      </section>
     </section>
   </main>
 </body>

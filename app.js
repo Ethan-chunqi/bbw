@@ -4,10 +4,10 @@
   const get = id => document.getElementById(id);
   const form = get('registration');
   const progress = get('application-progress');
-  if (!progress || !form.elements.firstName || !form.elements.lastName) {
+  if (!progress || !form.elements.firstName || !form.elements.lastName || !get('batch-form')) {
     const fresh = new URL(location.href);
-    if (fresh.searchParams.get('form') !== 'vip-20261119') {
-      fresh.searchParams.set('form', 'vip-20261119');
+    if (fresh.searchParams.get('form') !== 'batch-20261120') {
+      fresh.searchParams.set('form', 'batch-20261120');
       location.replace(fresh.href);
     } else {
       get('form-error').textContent = '页面版本尚未更新，请稍后刷新本页。';
@@ -68,12 +68,19 @@
   }
 
   const fragment = new URLSearchParams(location.hash.slice(1));
+  const batchMode = !fragment.has('invite') && new URL(location.href).searchParams.get('mode') === 'batch';
   if (fragment.has('invite')) {
     const nextToken = fragment.get('invite').trim();
     if (nextToken !== token) { requestId = ''; remember(requestKey, ''); }
     setToken(nextToken);
-    history.replaceState(null, '', location.pathname + location.search);
+    const cleanUrl = new URL(location.href);
+    cleanUrl.hash = '';
+    cleanUrl.searchParams.delete('mode');
+    history.replaceState(null, '', cleanUrl.href);
   }
+  window.addEventListener('hashchange', () => {
+    if (new URLSearchParams(location.hash.slice(1)).has('invite')) location.reload();
+  });
 
   async function request(path, payload) {
     const controller = new AbortController();
@@ -86,6 +93,8 @@
       if (!response.ok) {
         const error = new Error('Request failed');
         error.status = response.status;
+        const problem = await response.json().catch(() => ({}));
+        error.row = problem.row;
         throw error;
       }
       return await response.json();
@@ -113,6 +122,7 @@
     state = 'available';
     clearTimeout(timer);
     card.hidden = true;
+    get('entry-modes').hidden = Boolean(token);
     form.hidden = false;
     submit.disabled = false;
   }
@@ -120,6 +130,7 @@
   function showStatus(heading, detail, retry = false, personal = false) {
     clearTimeout(timer);
     form.hidden = true;
+    get('entry-modes').hidden = true;
     updateProgress(personal ? state : undefined);
     card.hidden = false;
     title.textContent = heading;
@@ -266,6 +277,230 @@
     if (document.hidden) clearTimeout(timer);
     else if (activeStates.has(state)) checkStatus();
   });
-  if (token) { showStatus('正在查询进度', '请稍候。'); checkStatus(); }
+
+  function openBatch() {
+    const batch = get('batch-form');
+    const paste = get('batch-paste');
+    const send = get('batch-submit');
+    const picker = get('entry-modes');
+    const problem = get('batch-error');
+    const receiptCard = get('batch-result');
+    const key = 'bbw-guest-batch:' + base.pathname;
+    let rows = [];
+    let attempt = null;
+    let receipts = [];
+
+    form.hidden = true;
+    picker.hidden = false;
+    batch.hidden = false;
+    get('single-mode').removeAttribute('aria-current');
+    get('batch-mode').setAttribute('aria-current', 'page');
+
+    function readRows() {
+      const parsed = [];
+      const errors = [];
+      const emails = new Map();
+      const lines = paste.value.split(/\r\n?|\n/);
+      const seenHeader = cols =>
+        /^(姓|姓（英文或拼音）|last ?name|surname)$/i.test(cols[0]) &&
+        /^(名|名（英文或拼音）|first ?name|given ?name)$/i.test(cols[1]) &&
+        /^(邮箱|(?:本人)?收票邮箱|e-?mail(?: address)?)$/i.test(cols[2]);
+      let count = 0;
+      for (let i = 0; i < lines.length; i++) {
+        const line = lines[i];
+        if (!line.trim()) continue;
+        const cols = line.split(line.includes('\t') ? '\t' : ',').map(v => v.trim());
+        if (count === 0 && !parsed.length && seenHeader(cols)) continue;
+        if (++count > 60) {
+          errors.push('每次最多提交 60 人，请拆分名单。');
+          break;
+        }
+        const [lastName, firstName, email, badgeName = ''] = cols;
+        const lineNo = i + 1;
+        let reason;
+        if (cols.length < 3 || cols.length > 4) reason = '请按「姓、名、收票邮箱、胸牌显示名（选填）」排列各列。';
+        else if (!lastName || !firstName || (firstName + ' ' + lastName).length > 200 || badgeName.length > 200) reason = '请核对姓、名和胸牌名，姓名最多 200 个字符。';
+        else if (cols.some(v => /[\p{Cc}\p{Cf}]/u.test(v))) reason = '资料中有不可见字符，请重新输入。';
+        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email) || email.length > 254) reason = '请核对收票邮箱。';
+        else if (emails.has(email.toLowerCase())) reason = '收票邮箱与第 ' + emails.get(email.toLowerCase()) + ' 行重复。';
+        if (reason) errors.push('第 ' + lineNo + ' 行：' + reason);
+        else {
+          emails.set(email.toLowerCase(), lineNo);
+          parsed.push({lineNo, lastName, firstName, email, badgeName});
+        }
+      }
+      if (paste.value.trim() && !count) errors.push('请在表头下方添加嘉宾资料。');
+      return {parsed, errors};
+    }
+
+    function personItem(person) {
+      const item = document.createElement('li');
+      const info = document.createElement('div');
+      const name = document.createElement('strong');
+      const email = document.createElement('span');
+      name.textContent = person.firstName + ' ' + person.lastName;
+      email.textContent = person.email;
+      info.append(name, email);
+      item.append(info);
+      return item;
+    }
+
+    function preview() {
+      const {parsed, errors} = readRows();
+      rows = parsed;
+      const note = get('batch-input-error');
+      note.hidden = !errors.length;
+      note.textContent = errors.join('\n');
+      paste.setCustomValidity(errors[0] || '');
+      get('batch-preview').hidden = !parsed.length;
+      get('preview-title').textContent = '名单预览 · ' + parsed.length + ' 位嘉宾';
+      get('preview-rows').replaceChildren(...rows.map(person => {
+        const item = personItem(person);
+        const badge = document.createElement('small');
+        badge.textContent = '胸牌：' + (person.badgeName || person.firstName + ' ' + person.lastName);
+        item.append(badge);
+        return item;
+      }));
+      send.disabled = !parsed.length || !!errors.length || busy;
+      send.textContent = '提交 ' + parsed.length + ' 位嘉宾的申请';
+      if (!parsed.length) send.textContent = '批量提交申请';
+    }
+
+    function progressUrl(person) {
+      const url = new URL(base);
+      url.hash = new URLSearchParams({invite:person.token});
+      return url.href;
+    }
+
+    function showReceipts() {
+      batch.hidden = true;
+      receiptCard.hidden = false;
+      get('batch-result-title').textContent = receipts.length + ' 份嘉宾申请已提交';
+      get('result-rows').replaceChildren(...receipts.map(person => {
+        const item = personItem(person);
+        const link = document.createElement('a');
+        link.href = progressUrl(person);
+        link.target = '_blank';
+        link.rel = 'noopener noreferrer';
+        link.textContent = '查看进度';
+        const copy = document.createElement('button');
+        copy.type = 'button';
+        copy.className = 'copy-person';
+        copy.textContent = '复制链接';
+        copy.addEventListener('click', async () => {
+          try {
+            await navigator.clipboard.writeText(link.href);
+            get('batch-copy-note').textContent = '已复制 ' + person.firstName + ' ' + person.lastName + ' 的进度链接。';
+          } catch {
+            get('batch-copy-note').textContent = '请长按或右键点击这位嘉宾的「查看进度」，选择复制链接。';
+            link.focus();
+          }
+        });
+        const actions = document.createElement('div');
+        actions.className = 'person-actions';
+        actions.append(link, copy);
+        item.append(actions);
+        return item;
+      }));
+      get('batch-result-title').focus();
+    }
+
+    function setSending(value) {
+      busy = value;
+      paste.readOnly = value || Boolean(attempt);
+      send.disabled = value;
+      get('batch-photo').disabled = value;
+      get('batch-data').disabled = value;
+    }
+
+    paste.addEventListener('input', () => {
+      get('batch-photo').checked = false;
+      get('batch-data').checked = false;
+      problem.hidden = true;
+      preview();
+    });
+    batch.addEventListener('submit', async event => {
+      event.preventDefault();
+      if (busy || !batch.reportValidity() || !rows.length) return;
+      if (!attempt) {
+        const entries = rows.map(({lineNo, ...attendee}) => ({
+          requestId:crypto.randomUUID(), attendee:{...attendee, consentPhoto:true, consentData:true}
+        }));
+        attempt = {text:paste.value, entries};
+        remember(key, JSON.stringify({attempt}));
+      }
+      problem.hidden = true;
+      setSending(true);
+      send.textContent = '正在提交…';
+      try {
+        const data = await request('registrations/batch', {entries:attempt.entries});
+        if (data?.results?.length !== rows.length || !data.results.every(r => r && typeof r.token === 'string' && r.token && Object.hasOwn(states, r.state))) throw new Error('Unconfirmed');
+        receipts = rows.map(({firstName,lastName,email}, i) => ({firstName,lastName,email,token:data.results[i].token}));
+        attempt = null;
+        remember(key, JSON.stringify({receipts}));
+        batch.reset();
+        showReceipts();
+      } catch (err) {
+        const prefix = rows[err.row - 1] ? '第 ' + rows[err.row - 1].lineNo + ' 行：' : '';
+        const messages = {
+          400:'请核对名单和授权后重新提交。', 403:'请使用官方申请页重新打开。',
+          409:prefix + '申请信息有冲突，请核对是否已提交。请移除已申请的嘉宾后再提交其余名单。',
+          410:'本次赠票申请已截止。', 413:'名单过大，请拆分后提交。',
+          422:prefix + '请核对姓名、收票邮箱和两项授权后再试。',
+          429:'提交过于频繁，请保留本页，稍后重试。'
+        };
+        if ([400,403,409,410,413,422].includes(err.status)) {
+          attempt = null;
+          remember(key, '');
+        }
+        problem.textContent = messages[err.status] || '暂时无法确认结果。请保留本页，点击下方按钮，用原名单重试。';
+        problem.hidden = false;
+      } finally {
+        setSending(false);
+        send.textContent = attempt ? '用原名单重试' : '提交 ' + rows.length + ' 位嘉宾的申请';
+      }
+    });
+    get('copy-batch').addEventListener('click', async () => {
+      const spreadsheetCell = value => /^[=+\-@＝＋－＠]/u.test(value.trimStart()) ? "'" + value : value;
+      const content = receipts.map(p => [p.firstName + ' ' + p.lastName, p.email, progressUrl(p)].map(spreadsheetCell).join('\t')).join('\n');
+      try {
+        await navigator.clipboard.writeText(content);
+        get('batch-copy-note').textContent = '已复制全部姓名、邮箱和进度链接，可粘贴到内部表格。';
+      } catch {
+        get('batch-copy-note').textContent = '请逐人长按或右键点击「查看进度」，选择复制链接。';
+      }
+    });
+    get('batch-next').addEventListener('click', () => {
+      remember(key, '');
+      receipts = [];
+      get('result-rows').replaceChildren();
+      get('batch-copy-note').textContent = '';
+      receiptCard.hidden = true;
+      batch.hidden = false;
+      problem.hidden = true;
+      preview();
+      paste.focus();
+    });
+    try {
+      const saved = JSON.parse(read(key) || '{}');
+      if (saved.receipts?.length) {
+        receipts = saved.receipts;
+        showReceipts();
+        return;
+      }
+      if (saved.attempt?.entries?.length && typeof saved.attempt.text === 'string') {
+        attempt = saved.attempt;
+        paste.value = attempt.text;
+        paste.readOnly = true;
+        problem.textContent = '上次提交的结果待确认。请核对原名单并勾选授权，然后重试。';
+        problem.hidden = false;
+      }
+    } catch { remember(key, ''); }
+    preview();
+    if (attempt) send.textContent = '用原名单重试';
+  }
+
+  if (batchMode) openBatch();
+  else if (token) { showStatus('正在查询进度', '请稍候。'); checkStatus(); }
   else showForm();
 })();
