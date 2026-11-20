@@ -9,8 +9,8 @@
   <meta name="theme-color" content="#0d0e0f">
   <title>UXUY VIP 嘉宾赠票 · 2026 曼谷币安区块链周</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20width%3D%221024%22%20height%3D%221024%22%20viewBox%3D%220%200%201024%201024%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20width%3D%221024%22%20height%3D%221024%22%20fill%3D%22black%22%2F%3E%0A%3Cpath%20d%3D%22M362.3%20226.976L175%20226.976L417%20514.244L175.141%20802H363.229L604.607%20514.31L362.3%20226.976Z%22%20fill%3D%22%23FE4200%22%2F%3E%0A%3Cpath%20d%3D%22M622.502%20535.553L847.304%20801.768L659.216%20801.768L528.65%20646.779L622.502%20535.553Z%22%20fill%3D%22%23FE4200%22%2F%3E%0A%3Cpath%20d%3D%22M622.568%20492.99L528.533%20381.547L709.7%20166H897L622.568%20492.99Z%22%20fill%3D%22%23FE4200%22%2F%3E%0A%3C%2Fsvg%3E">
-  <link rel="stylesheet" href="./styles.css?v=batch-20261120">
-  <script defer src="./app.js?v=batch-20261120"></script>
+  <link rel="stylesheet" href="./styles.css?v=guests-20261120">
+  <script defer src="./app.js?v=guests-20261120"></script>
 </head>
 <body>
   <header class="masthead">
@@ -76,37 +76,38 @@
         <button type="button" class="secondary" id="refresh" hidden>刷新进度</button>
         <p id="status-update" class="hint" role="status"></p>
       </section>
-      <nav id="entry-modes" class="entry-modes" aria-label="申请方式" hidden>
-        <a id="single-mode" href="?" aria-current="page">单人申请</a>
-        <a id="batch-mode" href="?mode=batch">批量提交</a>
-      </nav>
       <form id="registration" method="post">
         <div class="form-heading">
           <h2>申请嘉宾赠票</h2>
           <p>请按参会证件填写英文姓名或拼音。</p>
         </div>
 
-        <fieldset>
-          <legend>参会者资料</legend>
-          <div class="fields-grid">
-            <label>姓（英文或拼音）
-              <input name="lastName" autocomplete="family-name" spellcheck="false" placeholder="例如 Wang" maxlength="200" required>
-            </label>
-            <label>名（英文或拼音）
-              <input name="firstName" autocomplete="given-name" spellcheck="false" placeholder="例如 Ming" maxlength="200" required>
-            </label>
-            <label class="full-width">胸牌显示名（选填）
-              <input name="badgeName" autocomplete="nickname" placeholder="默认使用英文全名" maxlength="200" aria-describedby="badge-hint">
-              <small id="badge-hint">留空时，胸牌将显示你的英文全名（名在前，姓在后）。</small>
-            </label>
-            <label class="full-width">本人收票邮箱
-              <input name="email" type="email" inputmode="email" autocomplete="email" autocapitalize="none" spellcheck="false" placeholder="name@example.com" maxlength="254" aria-describedby="email-hint" required>
-              <small id="email-hint">入场凭证将发到这个邮箱，请确保邮箱填写正确。</small>
-            </label>
-          </div>
-        </fieldset>
+        <div id="guest-list">
+          <section class="guest-card" role="group" aria-labelledby="guest-title-1">
+            <div class="guest-card-heading">
+              <h3 id="guest-title-1">嘉宾 1</h3>
+              <button type="button" class="remove-guest" hidden>移除</button>
+            </div>
+            <div class="fields-grid">
+              <label>姓（英文或拼音）
+                <input name="lastName" autocomplete="section-guest1 family-name" spellcheck="false" placeholder="例如 Wang" maxlength="200" required>
+              </label>
+              <label>名（英文或拼音）
+                <input name="firstName" autocomplete="section-guest1 given-name" spellcheck="false" placeholder="例如 Ming" maxlength="200" required>
+              </label>
+              <label class="full-width">收票邮箱
+                <input name="email" type="email" inputmode="email" autocomplete="section-guest1 email" autocapitalize="none" spellcheck="false" placeholder="name@example.com" maxlength="254" aria-describedby="email-hint-1" required>
+                <small class="email-hint" id="email-hint-1">入场凭证将发到这个邮箱，请确保填写正确。</small>
+              </label>
+              <label class="full-width">胸牌显示名（选填）
+                <input name="badgeName" autocomplete="section-guest1 nickname" placeholder="默认使用英文全名（名 姓）" maxlength="200">
+              </label>
+            </div>
+          </section>
+        </div>
+        <button type="button" id="add-guest" hidden><span aria-hidden="true">＋</span> 添加一位嘉宾</button>
 
-        <fieldset class="consents">
+        <fieldset class="consents" id="personal-consents">
           <legend>确认与授权</legend>
           <label class="consent-row">
             <input type="checkbox" name="consentPhoto" required>
@@ -118,26 +119,7 @@
           </label>
         </fieldset>
 
-        <div class="form-bottom">
-          <p id="form-error" role="alert" class="form-error" hidden></p>
-          <button type="submit" id="submit" class="primary" disabled>提交申请</button>
-          <p class="hint">提交后可保存进度链接，随时查看审核和领票状态。</p>
-        </div>
-      </form>
-      <form id="batch-form" method="post" hidden>
-        <div class="form-heading">
-          <h2>批量提交嘉宾名单</h2>
-          <p>每人一行，每次最多 60 人。每位嘉宾分别审核，票务邮件发到各自的邮箱。</p>
-        </div>
-        <label for="batch-paste" class="field-title">粘贴名单</label>
-        <p id="batch-guide" class="hint">从 Excel 依次复制「姓、名、收票邮箱、胸牌显示名」四列。胸牌名可以留空，默认显示「名 姓」。手动输入时用英文逗号分隔。</p>
-        <textarea id="batch-paste" rows="5" aria-describedby="batch-guide" spellcheck="false" autocapitalize="none" placeholder="Wang,Ming,ming@example.com&#10;Li,Xin,xin@example.com,Xin" required></textarea>
-        <p id="batch-input-error" class="form-error" role="alert" hidden></p>
-        <section id="batch-preview" class="batch-preview" aria-labelledby="preview-title" hidden>
-          <h3 id="preview-title"></h3>
-          <ul class="people-list" id="preview-rows"></ul>
-        </section>
-        <fieldset class="consents">
+        <fieldset class="consents" id="team-consents" disabled hidden>
           <legend>代办确认与授权</legend>
           <label class="consent-row">
             <input id="batch-photo" type="checkbox" required>
@@ -149,8 +131,9 @@
           </label>
         </fieldset>
         <div class="form-bottom">
-          <p id="batch-error" role="alert" class="form-error" hidden></p>
-          <button class="primary" type="submit" id="batch-submit">批量提交申请</button>
+          <p id="form-error" role="alert" class="form-error" hidden></p>
+          <button type="submit" id="submit" class="primary" disabled>提交申请</button>
+          <p class="hint">提交后可保存进度链接，随时查看审核和领票状态。</p>
         </div>
       </form>
       <section id="batch-result" class="status-card" hidden>

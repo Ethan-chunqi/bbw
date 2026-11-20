@@ -14,7 +14,7 @@
 body { margin: 0; min-width: 260px; }
 [hidden] { display: none !important; }
 a { color: var(--orange-ink); text-underline-offset: 3px; }
-button, input, textarea { font: inherit; }
+button, input { font: inherit; }
 button { cursor: pointer; }
 button:disabled { cursor: wait; opacity: .62; }
 :focus-visible { outline: 3px solid #b1380b; outline-offset: 3px; }
@@ -61,7 +61,7 @@ h1 { margin: 0; font-size: clamp(2.6rem,4.1vw,3.9rem); font-weight: 760; line-he
 .event-links { margin: 0 clamp(24px,2.8vw,38px); padding: 15px 0 23px; display: flex; flex-wrap: wrap; gap: 8px 22px; border-top: 1px solid var(--line); }
 .event-links a { font-size: .875rem; color: var(--ink); }
 .workspace { min-width: 0; }
-#registration, #batch-form, .status-card {
+#registration, .status-card {
   margin: 0; background: white; border: 1px solid var(--line); border-radius: 18px; padding: clamp(22px,2.7vw,38px);
 }
 .form-heading h2, .status-card h2 { margin: 0; font-size: clamp(1.7rem,2.6vw,2.2rem); line-height: 1.24; font-weight: 710; letter-spacing: -.045em; }
@@ -69,9 +69,6 @@ h1 { margin: 0; font-size: clamp(2.6rem,4.1vw,3.9rem); font-weight: 760; line-he
 .form-heading { margin-bottom: 24px; }
 form fieldset { border: 0; padding: 0; margin: 0; min-width: 0; }
 legend { margin: 0 0 13px; padding: 0; font-size: 1rem; font-weight: 680; }
-#registration fieldset:first-of-type legend {
-  position: absolute; width: 1px; height: 1px; margin: -1px; padding: 0; overflow: hidden; clip-path: inset(50%); white-space: nowrap;
-}
 .fields-grid { display: grid; gap: 16px; }
 .fields-grid label { display: flex; flex-direction: column; gap: 6px; font-size: .95rem; font-weight: 590; min-width: 0; }
 input:not([type="checkbox"]) {
@@ -114,7 +111,7 @@ input[type="checkbox"] { width: 18px; height: 18px; margin: 3px 0 0; flex: none;
   .edition { font-size: .73rem; letter-spacing: .04em; }
   .page-layout { display: grid; grid-template-columns: minmax(0,1fr); padding: 20px 16px 36px; gap: 18px; }
   .event-panel { position: static; }
-  .event-panel, #registration, #batch-form, .status-card { border-radius: 13px; }
+  .event-panel, #registration, .status-card { border-radius: 13px; }
   .event-content { padding: 20px 22px; }
   .event-kicker { font-size: .87rem; }
   .cover-title { position: relative; display: block; margin: 9px 0; padding-right: 68px; }
@@ -128,14 +125,14 @@ input[type="checkbox"] { width: 18px; height: 18px; margin: 3px 0 0; flex: none;
   .event-details dt { font-size: .8rem; }
   .event-details dd { text-align: left; font-size: .88rem; }
   .event-links { margin: 0 22px; padding: 9px 0 12px; }
-  #registration, #batch-form, .status-card { padding: 22px; }
+  #registration, .status-card { padding: 22px; }
 }
 @media (max-width: 349px) {
   .event-name { display: none; }
   .cover-title { padding-right: 42px; }
   .ticket-mark { width: 37px; }
   .page-layout { padding-inline: 10px; }
-  .event-content, #registration, #batch-form, .status-card { padding: 17px; }
+  .event-content, #registration, .status-card { padding: 17px; }
 }
 
 .cover-title h1 span { white-space: nowrap; }
@@ -169,16 +166,23 @@ input[type="checkbox"] { width: 18px; height: 18px; margin: 3px 0 0; flex: none;
   .cover-title h1 { font-size: 2.1rem; }
 }
 
-.entry-modes { display: flex; gap: 4px; width: fit-content; margin: 0 0 12px; padding: 4px; border: 1px solid var(--line); border-radius: 10px; background: #eeefec; }
-.entry-modes a { padding: 7px 16px; border-radius: 7px; color: var(--muted); font-size: .93rem; font-weight: 650; text-decoration: none; }
-.entry-modes a[aria-current] { background: var(--night); color: white; }
-.field-title, .batch-preview h3 { font-size: 1rem; font-weight: 680; }
-#batch-guide { margin: 5px 0 10px; }
-#batch-paste { display: block; width: 100%; padding: 12px; min-height: 116px; resize: vertical; border: 1px solid #babbb9; border-radius: 7px; color: var(--ink); background: #fff; font-family: ui-monospace, monospace; font-size: .95rem; line-height: 1.65; }
-#batch-paste:read-only { background: #f7f7f5; }
-#batch-input-error { margin: 8px 0; white-space: pre-line; }
-.batch-preview { margin-top: 18px; }
-.batch-preview h3 { margin: 0; }
+#guest-list { display: grid; gap: 20px; }
+.guest-card { padding: clamp(16px,2.2vw,26px); border: 1px solid #b9bab5; border-radius: 12px; background: #fafaf8; min-width: 0; }
+.guest-card-heading { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 18px; }
+.guest-card-heading h3 { margin: 0; padding-left: 10px; border-left: 3px solid var(--orange); font-size: 1.12rem; font-weight: 700; line-height: 1.25; }
+.remove-guest { padding: 3px 8px; border: 1px solid #cfcec9; border-radius: 5px; background: white; color: var(--muted); font-size: .84rem; }
+.guest-card .fields-grid { row-gap: 19px; }
+.guest-card input { min-height: 48px; border: 1.5px solid #7c817d; }
+.guest-card input:focus { border-color: var(--orange-ink); }
+#add-guest { display: flex; align-items: center; justify-content: center; gap: 7px; width: 100%; min-height: 48px; margin-top: 15px; border: 1px dashed #ac4c2b; border-radius: 9px; background: #fff7f2; color: #91300e; font-size: 1rem; font-weight: 680; }
+#add-guest span { font-size: 1.35rem; line-height: 1; }
+#add-guest:hover:not(:disabled) { background: #ffede2; }
+#add-guest:disabled { cursor: default; }
+@media (max-width: 450px) {
+  #registration { padding: 18px 14px; }
+  .guest-card { padding: 16px 13px; }
+  .guest-card .fields-grid { row-gap: 15px; }
+}
 .people-list { list-style: none; padding: 0; margin: 8px 0 0; max-height: 22rem; overflow: auto; overscroll-behavior: contain; }
 .people-list li { display: flex; justify-content: space-between; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 10px 0; border-bottom: 1px solid var(--line); overflow-wrap: anywhere; }
 .people-list strong, .people-list span { display: block; }

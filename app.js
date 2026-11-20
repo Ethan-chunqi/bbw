@@ -4,10 +4,10 @@
   const get = id => document.getElementById(id);
   const form = get('registration');
   const progress = get('application-progress');
-  if (!progress || !form.elements.firstName || !form.elements.lastName || !get('batch-form')) {
+  if (!progress || !form.elements.firstName || !form.elements.lastName || !get('add-guest')) {
     const fresh = new URL(location.href);
-    if (fresh.searchParams.get('form') !== 'batch-20261120') {
-      fresh.searchParams.set('form', 'batch-20261120');
+    if (fresh.searchParams.get('form') !== 'guests-20261120') {
+      fresh.searchParams.set('form', 'guests-20261120');
       location.replace(fresh.href);
     } else {
       get('form-error').textContent = '页面版本尚未更新，请稍后刷新本页。';
@@ -31,6 +31,15 @@
     : new URL('api/', base);
   const storageKey = 'bbw-guest-invite:' + base.pathname;
   const requestKey = 'bbw-guest-request:' + base.pathname;
+  const batchKey = 'bbw-guest-batch:' + base.pathname;
+  const singleAttemptKey = requestKey + ':attempt';
+  const list = get('guest-list');
+  const guestTemplate = list.firstElementChild.cloneNode(true);
+  const add = get('add-guest');
+  const receiptCard = get('batch-result');
+  const fields = ['lastName', 'firstName', 'email', 'badgeName'];
+  let attempt = null;
+  let receipts = [];
   const states = {
     pending: ['申请已提交，等待审核', 'UXUY 收到了你的申请。审核通过后，UXUY 将代你办理活动报名和领票。'],
     declined: ['申请未通过', '如需了解具体情况，请联系发出邀请的 UXUY 工作人员。'],
@@ -71,7 +80,7 @@
   const batchMode = !fragment.has('invite') && new URL(location.href).searchParams.get('mode') === 'batch';
   if (fragment.has('invite')) {
     const nextToken = fragment.get('invite').trim();
-    if (nextToken !== token) { requestId = ''; remember(requestKey, ''); }
+    if (nextToken !== token) { requestId = ''; remember(requestKey, ''); remember(singleAttemptKey, ''); }
     setToken(nextToken);
     const cleanUrl = new URL(location.href);
     cleanUrl.hash = '';
@@ -122,15 +131,14 @@
     state = 'available';
     clearTimeout(timer);
     card.hidden = true;
-    get('entry-modes').hidden = Boolean(token);
     form.hidden = false;
-    submit.disabled = false;
+    refreshGuests();
   }
 
   function showStatus(heading, detail, retry = false, personal = false) {
     clearTimeout(timer);
     form.hidden = true;
-    get('entry-modes').hidden = true;
+    receiptCard.hidden = true;
     updateProgress(personal ? state : undefined);
     card.hidden = false;
     title.textContent = heading;
@@ -192,76 +200,6 @@
     } finally { busy = false; refresh.disabled = false; }
   }
 
-  form.addEventListener('input', event => {
-    if (event.target.setCustomValidity) event.target.setCustomValidity('');
-    if (['firstName', 'lastName'].includes(event.target.name)) {
-      const fields = form.elements;
-      fields.firstName.setCustomValidity('');
-      fields.lastName.setCustomValidity('');
-      fields.badgeName.placeholder = [fields.firstName.value, fields.lastName.value]
-        .map(value => value.trim()).filter(Boolean).join(' ') || '默认使用英文全名';
-    }
-    errorNote.hidden = true;
-  });
-
-  form.addEventListener('submit', async event => {
-    event.preventDefault();
-    if (busy || state !== 'available') return;
-    const fields = form.elements;
-    for (const field of [fields.lastName, fields.firstName, fields.badgeName]) {
-      if (/\p{Cc}|\p{Cf}/u.test(field.value) || (field.required && !field.value.trim())) {
-        field.setCustomValidity('请填写姓名，并移除不可见字符。');
-        field.reportValidity();
-        return;
-      }
-    }
-    const normalize = value => value.trim().replace(/\s+/gu, ' ');
-    const firstName = normalize(fields.firstName.value);
-    const lastName = normalize(fields.lastName.value);
-    const fullName = firstName + ' ' + lastName;
-    if (fullName.length > 200) {
-      fields.firstName.setCustomValidity('英文姓名合计最多可填写 200 个字符。');
-      fields.firstName.reportValidity();
-      return;
-    }
-    const attendee = {
-      firstName, lastName, fullName, badgeName: normalize(fields.badgeName.value) || fullName,
-      email: fields.email.value.trim(),
-      consentPhoto: fields.consentPhoto.checked, consentData: fields.consentData.checked
-    };
-    if (!requestId) { requestId = crypto.randomUUID(); remember(requestKey, requestId); }
-    busy = true;
-    submit.disabled = true;
-    submit.textContent = '提交中…';
-    errorNote.hidden = true;
-    try {
-      const receipt = await request('registration', { requestId, ...(token ? { token } : {}), attendee });
-      if (!receipt || !Object.hasOwn(states, receipt.state)) throw new Error('Submission not confirmed');
-      if (typeof receipt.token === 'string' && receipt.token) setToken(receipt.token);
-      if (!token) throw new Error('Missing receipt');
-      render(receipt);
-      requestId = '';
-      remember(requestKey, '');
-      form.reset();
-      title.focus();
-    } catch (error) {
-      const messages = {
-        400: '请核对英文姓名、邮箱及两项授权后再次提交。',
-        422: '请核对英文姓名、邮箱及两项授权后再次提交。',
-        409: '该邮箱或邀请已有申请记录。请打开先前保存的进度链接。如需更正资料，请联系 UXUY。',
-        410: '本次赠票申请已截止。如需核实，请联系 UXUY。',
-        429: '提交过于频繁。请先保留本页，稍后再试。'
-      };
-      errorNote.textContent = messages[error.status]
-        || '暂时无法确认提交结果。请保留本页，使用相同资料再次提交，即可核对这份申请。';
-      errorNote.hidden = false;
-    } finally {
-      busy = false;
-      submit.disabled = false;
-      submit.textContent = '提交申请';
-    }
-  });
-
   get('copy-link').addEventListener('click', async () => {
     if (!token) return;
     try {
@@ -278,229 +216,290 @@
     else if (activeStates.has(state)) checkStatus();
   });
 
-  function openBatch() {
-    const batch = get('batch-form');
-    const paste = get('batch-paste');
-    const send = get('batch-submit');
-    const picker = get('entry-modes');
-    const problem = get('batch-error');
-    const receiptCard = get('batch-result');
-    const key = 'bbw-guest-batch:' + base.pathname;
-    let rows = [];
-    let attempt = null;
-    let receipts = [];
+  function personItem(person) {
+    const item = document.createElement('li');
+    const info = document.createElement('div');
+    const name = document.createElement('strong');
+    const email = document.createElement('span');
+    name.textContent = person.firstName + ' ' + person.lastName;
+    email.textContent = person.email;
+    info.append(name, email);
+    item.append(info);
+    return item;
+  }
 
+  function progressUrl(person) {
+    const url = new URL(base);
+    url.hash = new URLSearchParams({invite:person.token});
+    return url.href;
+  }
+
+  function showReceipts() {
     form.hidden = true;
-    picker.hidden = false;
-    batch.hidden = false;
-    get('single-mode').removeAttribute('aria-current');
-    get('batch-mode').setAttribute('aria-current', 'page');
-
-    function readRows() {
-      const parsed = [];
-      const errors = [];
-      const emails = new Map();
-      const lines = paste.value.split(/\r\n?|\n/);
-      const seenHeader = cols =>
-        /^(姓|姓（英文或拼音）|last ?name|surname)$/i.test(cols[0]) &&
-        /^(名|名（英文或拼音）|first ?name|given ?name)$/i.test(cols[1]) &&
-        /^(邮箱|(?:本人)?收票邮箱|e-?mail(?: address)?)$/i.test(cols[2]);
-      let count = 0;
-      for (let i = 0; i < lines.length; i++) {
-        const line = lines[i];
-        if (!line.trim()) continue;
-        const cols = line.split(line.includes('\t') ? '\t' : ',').map(v => v.trim());
-        if (count === 0 && !parsed.length && seenHeader(cols)) continue;
-        if (++count > 60) {
-          errors.push('每次最多提交 60 人，请拆分名单。');
-          break;
+    receiptCard.hidden = false;
+    get('batch-result-title').textContent = receipts.length + ' 份嘉宾申请已提交';
+    get('result-rows').replaceChildren(...receipts.map(person => {
+      const item = personItem(person);
+      const link = document.createElement('a');
+      link.href = progressUrl(person);
+      link.target = '_blank';
+      link.rel = 'noopener noreferrer';
+      link.textContent = '查看进度';
+      const copy = document.createElement('button');
+      copy.type = 'button';
+      copy.className = 'copy-person';
+      copy.textContent = '复制链接';
+      copy.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(link.href);
+          get('batch-copy-note').textContent = '已复制 ' + person.firstName + ' ' + person.lastName + ' 的进度链接。';
+        } catch {
+          get('batch-copy-note').textContent = '请长按或右键点击这位嘉宾的「查看进度」，选择复制链接。';
+          link.focus();
         }
-        const [lastName, firstName, email, badgeName = ''] = cols;
-        const lineNo = i + 1;
-        let reason;
-        if (cols.length < 3 || cols.length > 4) reason = '请按「姓、名、收票邮箱、胸牌显示名（选填）」排列各列。';
-        else if (!lastName || !firstName || (firstName + ' ' + lastName).length > 200 || badgeName.length > 200) reason = '请核对姓、名和胸牌名，姓名最多 200 个字符。';
-        else if (cols.some(v => /[\p{Cc}\p{Cf}]/u.test(v))) reason = '资料中有不可见字符，请重新输入。';
-        else if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(email) || email.length > 254) reason = '请核对收票邮箱。';
-        else if (emails.has(email.toLowerCase())) reason = '收票邮箱与第 ' + emails.get(email.toLowerCase()) + ' 行重复。';
-        if (reason) errors.push('第 ' + lineNo + ' 行：' + reason);
-        else {
-          emails.set(email.toLowerCase(), lineNo);
-          parsed.push({lineNo, lastName, firstName, email, badgeName});
-        }
-      }
-      if (paste.value.trim() && !count) errors.push('请在表头下方添加嘉宾资料。');
-      return {parsed, errors};
-    }
-
-    function personItem(person) {
-      const item = document.createElement('li');
-      const info = document.createElement('div');
-      const name = document.createElement('strong');
-      const email = document.createElement('span');
-      name.textContent = person.firstName + ' ' + person.lastName;
-      email.textContent = person.email;
-      info.append(name, email);
-      item.append(info);
+      });
+      const actions = document.createElement('div');
+      actions.className = 'person-actions';
+      actions.append(link, copy);
+      item.append(actions);
       return item;
-    }
+    }));
+    get('batch-result-title').focus();
+  }
 
-    function preview() {
-      const {parsed, errors} = readRows();
-      rows = parsed;
-      const note = get('batch-input-error');
-      note.hidden = !errors.length;
-      note.textContent = errors.join('\n');
-      paste.setCustomValidity(errors[0] || '');
-      get('batch-preview').hidden = !parsed.length;
-      get('preview-title').textContent = '名单预览 · ' + parsed.length + ' 位嘉宾';
-      get('preview-rows').replaceChildren(...rows.map(person => {
-        const item = personItem(person);
-        const badge = document.createElement('small');
-        badge.textContent = '胸牌：' + (person.badgeName || person.firstName + ' ' + person.lastName);
-        item.append(badge);
-        return item;
-      }));
-      send.disabled = !parsed.length || !!errors.length || busy;
-      send.textContent = '提交 ' + parsed.length + ' 位嘉宾的申请';
-      if (!parsed.length) send.textContent = '批量提交申请';
+  get('copy-batch').addEventListener('click', async () => {
+    const spreadsheetCell = value => /^[=+\-@＝＋－＠]/u.test(value.trimStart()) ? "'" + value : value;
+    const content = receipts.map(p => [p.firstName + ' ' + p.lastName, p.email, progressUrl(p)].map(spreadsheetCell).join('\t')).join('\n');
+    try {
+      await navigator.clipboard.writeText(content);
+      get('batch-copy-note').textContent = '已复制全部姓名、邮箱和进度链接，可粘贴到内部表格。';
+    } catch {
+      get('batch-copy-note').textContent = '请逐人长按或右键点击「查看进度」，选择复制链接。';
     }
+  });
+  let sending = false;
 
-    function progressUrl(person) {
-      const url = new URL(base);
-      url.hash = new URLSearchParams({invite:person.token});
-      return url.href;
-    }
+  function guestInput(guest, name) {
+    return guest.querySelector('input[name="' + name + '"]');
+  }
 
-    function showReceipts() {
-      batch.hidden = true;
-      receiptCard.hidden = false;
-      get('batch-result-title').textContent = receipts.length + ' 份嘉宾申请已提交';
-      get('result-rows').replaceChildren(...receipts.map(person => {
-        const item = personItem(person);
-        const link = document.createElement('a');
-        link.href = progressUrl(person);
-        link.target = '_blank';
-        link.rel = 'noopener noreferrer';
-        link.textContent = '查看进度';
-        const copy = document.createElement('button');
-        copy.type = 'button';
-        copy.className = 'copy-person';
-        copy.textContent = '复制链接';
-        copy.addEventListener('click', async () => {
-          try {
-            await navigator.clipboard.writeText(link.href);
-            get('batch-copy-note').textContent = '已复制 ' + person.firstName + ' ' + person.lastName + ' 的进度链接。';
-          } catch {
-            get('batch-copy-note').textContent = '请长按或右键点击这位嘉宾的「查看进度」，选择复制链接。';
-            link.focus();
-          }
-        });
-        const actions = document.createElement('div');
-        actions.className = 'person-actions';
-        actions.append(link, copy);
-        item.append(actions);
-        return item;
-      }));
-      get('batch-result-title').focus();
-    }
+  function updateBadge(guest) {
+    const name = ['firstName', 'lastName'].map(key => guestInput(guest, key).value.trim()).filter(Boolean).join(' ');
+    guestInput(guest, 'badgeName').placeholder = name || '默认使用英文全名（名 姓）';
+  }
 
-    function setSending(value) {
-      busy = value;
-      paste.readOnly = value || Boolean(attempt);
-      send.disabled = value;
-      get('batch-photo').disabled = value;
-      get('batch-data').disabled = value;
-    }
+  function teamSubmission() {
+    return batchMode || list.children.length > 1 || attempt?.kind === 'batch';
+  }
 
-    paste.addEventListener('input', () => {
-      get('batch-photo').checked = false;
-      get('batch-data').checked = false;
-      problem.hidden = true;
-      preview();
-    });
-    batch.addEventListener('submit', async event => {
-      event.preventDefault();
-      if (busy || !batch.reportValidity() || !rows.length) return;
-      if (!attempt) {
-        const entries = rows.map(({lineNo, ...attendee}) => ({
-          requestId:crypto.randomUUID(), attendee:{...attendee, consentPhoto:true, consentData:true}
-        }));
-        attempt = {text:paste.value, entries};
-        remember(key, JSON.stringify({attempt}));
+  function clearConsent() {
+    for (const input of form.querySelectorAll('input[type=checkbox]')) input.checked = false;
+  }
+
+  function refreshGuests() {
+    const guests = [...list.children];
+    const locked = sending || Boolean(attempt);
+    const team = teamSubmission();
+    add.hidden = !batchMode && Boolean(token);
+    add.disabled = locked || guests.length >= 60;
+    add.lastChild.textContent = guests.length >= 60 ? ' 已达到每次 60 位上限' : ' 添加一位嘉宾';
+    for (const [i, guest] of guests.entries()) {
+      const n = i + 1;
+      const title = guest.querySelector('h3');
+      title.textContent = '嘉宾 ' + n;
+      title.id = 'guest-title-' + n;
+      guest.setAttribute('aria-labelledby', title.id);
+      const remove = guest.querySelector('.remove-guest');
+      remove.hidden = guests.length === 1 || add.hidden;
+      remove.disabled = locked;
+      remove.setAttribute('aria-label', '移除嘉宾 ' + n);
+      const hint = guest.querySelector('.email-hint');
+      hint.id = 'email-hint-' + n;
+      guestInput(guest, 'email').setAttribute('aria-describedby', hint.id);
+      for (const input of guest.querySelectorAll('input')) {
+        input.readOnly = locked;
+        const purpose = input.autocomplete.split(' ').pop();
+        input.autocomplete = 'section-guest' + n + ' ' + purpose;
       }
-      problem.hidden = true;
-      setSending(true);
-      send.textContent = '正在提交…';
-      try {
-        const data = await request('registrations/batch', {entries:attempt.entries});
-        if (data?.results?.length !== rows.length || !data.results.every(r => r && typeof r.token === 'string' && r.token && Object.hasOwn(states, r.state))) throw new Error('Unconfirmed');
-        receipts = rows.map(({firstName,lastName,email}, i) => ({firstName,lastName,email,token:data.results[i].token}));
-        attempt = null;
-        remember(key, JSON.stringify({receipts}));
-        batch.reset();
-        showReceipts();
-      } catch (err) {
-        const prefix = rows[err.row - 1] ? '第 ' + rows[err.row - 1].lineNo + ' 行：' : '';
-        const messages = {
-          400:'请核对名单和授权后重新提交。', 403:'请使用官方申请页重新打开。',
-          409:prefix + '申请信息有冲突，请核对是否已提交。请移除已申请的嘉宾后再提交其余名单。',
-          410:'本次赠票申请已截止。', 413:'名单过大，请拆分后提交。',
-          422:prefix + '请核对姓名、收票邮箱和两项授权后再试。',
-          429:'提交过于频繁，请保留本页，稍后重试。'
-        };
-        if ([400,403,409,410,413,422].includes(err.status)) {
-          attempt = null;
-          remember(key, '');
+      updateBadge(guest);
+    }
+    const personal = get('personal-consents');
+    personal.hidden = team; personal.disabled = team || sending;
+    const group = get('team-consents');
+    group.hidden = !team; group.disabled = !team || sending;
+    submit.disabled = sending;
+    submit.textContent = sending ? '正在提交…' : attempt ? '用原资料重试' : team ? '提交 ' + guests.length + ' 位嘉宾的申请' : '提交申请';
+  }
+
+  function appendGuest(person) {
+    const guest = guestTemplate.cloneNode(true);
+    for (const key of fields) guestInput(guest, key).value = person?.[key] || '';
+    list.append(guest);
+    return guest;
+  }
+
+  function changedGuests() {
+    clearConsent();
+    errorNote.hidden = true;
+    for (const input of list.querySelectorAll('input')) input.setCustomValidity('');
+  }
+
+  add.addEventListener('click', () => {
+    if (sending || attempt || (!batchMode && token) || list.children.length >= 60) return;
+    const guest = appendGuest();
+    changedGuests();
+    refreshGuests();
+    guestInput(guest, 'lastName').focus();
+  });
+
+  list.addEventListener('click', event => {
+    const remove = event.target.closest('.remove-guest');
+    if (!remove || sending || attempt || list.children.length === 1) return;
+    const guest = remove.closest('.guest-card');
+    const next = guest.nextElementSibling || guest.previousElementSibling;
+    guest.remove();
+    changedGuests();
+    refreshGuests();
+    guestInput(next, 'lastName').focus();
+  });
+  list.addEventListener('input', event => {
+    changedGuests();
+    updateBadge(event.target.closest('.guest-card'));
+  });
+
+  function collectEntries() {
+    const emails = new Map();
+    const entries = [];
+    for (const [i, guest] of [...list.children].entries()) {
+      const attendee = {consentPhoto:true, consentData:true};
+      for (const key of fields) {
+        const input = guestInput(guest, key);
+        const value = input.value.trim();
+        if (/[\p{Cc}\p{Cf}]/u.test(input.value) || (input.required && !value)) {
+          input.setCustomValidity('请补全此项，并移除不可见字符。');
         }
-        problem.textContent = messages[err.status] || '暂时无法确认结果。请保留本页，点击下方按钮，用原名单重试。';
-        problem.hidden = false;
-      } finally {
-        setSending(false);
-        send.textContent = attempt ? '用原名单重试' : '提交 ' + rows.length + ' 位嘉宾的申请';
+        attendee[key] = key === 'email' ? value : value.replace(/\s+/gu, ' ');
       }
-    });
-    get('copy-batch').addEventListener('click', async () => {
-      const spreadsheetCell = value => /^[=+\-@＝＋－＠]/u.test(value.trimStart()) ? "'" + value : value;
-      const content = receipts.map(p => [p.firstName + ' ' + p.lastName, p.email, progressUrl(p)].map(spreadsheetCell).join('\t')).join('\n');
-      try {
-        await navigator.clipboard.writeText(content);
-        get('batch-copy-note').textContent = '已复制全部姓名、邮箱和进度链接，可粘贴到内部表格。';
-      } catch {
-        get('batch-copy-note').textContent = '请逐人长按或右键点击「查看进度」，选择复制链接。';
+      const fullName = attendee.firstName + ' ' + attendee.lastName;
+      attendee.fullName = fullName;
+      if (fullName.length > 200) guestInput(guest, 'firstName').setCustomValidity('英文姓名合计最多可填写 200 个字符。');
+      const email = guestInput(guest, 'email');
+      const address = attendee.email.toLowerCase();
+      if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/u.test(address)) email.setCustomValidity('请填写完整的收票邮箱。');
+      if (emails.has(address)) email.setCustomValidity('此邮箱与嘉宾 ' + emails.get(address) + ' 重复，请核对。');
+      emails.set(address, i + 1);
+      const invalid = guest.querySelector('input:invalid');
+      if (invalid) { invalid.reportValidity(); return null; }
+      attendee.badgeName ||= fullName;
+      entries.push({requestId:!teamSubmission() && requestId ? requestId : crypto.randomUUID(), attendee});
+    }
+    return entries;
+  }
+
+  function forgetAttempt(kind) {
+    remember(kind === 'batch' ? batchKey : singleAttemptKey, '');
+    if (kind === 'single') {
+      requestId = '';
+      remember(requestKey, '');
+    }
+    attempt = null;
+  }
+
+  form.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (busy || state !== 'available' || !form.reportValidity()) return;
+    const kind = teamSubmission() ? 'batch' : 'single';
+    if (!attempt) {
+      const entries = collectEntries();
+      if (!entries) return;
+      attempt = {kind, entries};
+      if (kind === 'single') {
+        requestId = entries[0].requestId;
+        remember(requestKey, requestId);
       }
-    });
-    get('batch-next').addEventListener('click', () => {
-      remember(key, '');
-      receipts = [];
-      get('result-rows').replaceChildren();
-      get('batch-copy-note').textContent = '';
-      receiptCard.hidden = true;
-      batch.hidden = false;
-      problem.hidden = true;
-      preview();
-      paste.focus();
-    });
+      remember(kind === 'batch' ? batchKey : singleAttemptKey, JSON.stringify({attempt, origin:batchMode ? 'team' : 'root'}));
+    }
+    sending = true; busy = true;
+    errorNote.hidden = true;
+    refreshGuests();
+    try {
+      if (kind === 'single') {
+        const receipt = await request('registration', {...attempt.entries[0], ...(token ? {token} : {})});
+        if (!receipt || !Object.hasOwn(states, receipt.state)) throw new Error('Unconfirmed');
+        if (typeof receipt.token === 'string' && receipt.token) setToken(receipt.token);
+        if (!token) throw new Error('Missing receipt');
+        forgetAttempt(kind);
+        form.reset();
+        render(receipt);
+        title.focus();
+      } else {
+        const data = await request('registrations/batch', {entries:attempt.entries});
+        if (data?.results?.length !== attempt.entries.length || !data.results.every(r => r && typeof r.token === 'string' && r.token && Object.hasOwn(states, r.state))) throw new Error('Unconfirmed');
+        receipts = attempt.entries.map(({attendee:{firstName,lastName,email}}, i) => ({firstName,lastName,email,token:data.results[i].token}));
+        attempt = null;
+        remember(batchKey, JSON.stringify({receipts, origin:batchMode ? 'team' : 'root'}));
+        form.reset();
+        showReceipts();
+      }
+    } catch (err) {
+      const prefix = Number.isInteger(err.row) ? '嘉宾 ' + err.row + '：' : '';
+      const messages = {
+        400:'请核对姓名、邮箱和两项授权。', 403:'请重新打开原申请链接。',
+        409:kind === 'single' ? '该邮箱或邀请已有申请记录，请使用先前的进度链接。' : prefix + '申请资料有冲突，请核对是否已提交。已申请的嘉宾可以从本次名单中移除。',
+        410:'本次赠票申请已截止。', 413:'名单过大，请分次提交。',
+        422:prefix + '请核对姓名、收票邮箱和两项授权。',
+        429:'提交过于频繁，请保留本页，稍后重试。'
+      };
+      if ([400,403,409,410,413,422].includes(err.status)) forgetAttempt(kind);
+      errorNote.textContent = messages[err.status] || '暂时无法确认提交结果，请用原资料重试。';
+      errorNote.hidden = false;
+    } finally {
+      sending = false; busy = false;
+      if (!form.hidden) refreshGuests();
+    }
+  });
+
+  get('batch-next').addEventListener('click', () => {
+    remember(batchKey, '');
+    receipts = [];
+    receiptCard.hidden = true;
+    get('result-rows').replaceChildren();
+    get('batch-copy-note').textContent = '';
+    list.replaceChildren();
+    const guest = appendGuest();
+    clearConsent();
+    errorNote.hidden = true;
+    showForm();
+    guestInput(guest, 'lastName').focus();
+  });
+
+  function restoreSavedSubmission(key, defaultKind) {
     try {
       const saved = JSON.parse(read(key) || '{}');
+      if (defaultKind === 'batch' && !batchMode && saved.origin !== 'root') return false;
       if (saved.receipts?.length) {
         receipts = saved.receipts;
         showReceipts();
-        return;
+        return true;
       }
-      if (saved.attempt?.entries?.length && typeof saved.attempt.text === 'string') {
-        attempt = saved.attempt;
-        paste.value = attempt.text;
-        paste.readOnly = true;
-        problem.textContent = '上次提交的结果待确认。请核对原名单并勾选授权，然后重试。';
-        problem.hidden = false;
-      }
-    } catch { remember(key, ''); }
-    preview();
-    if (attempt) send.textContent = '用原名单重试';
+      if (!saved.attempt?.entries?.length) return false;
+      attempt = {kind:defaultKind, entries:saved.attempt.entries};
+      list.replaceChildren();
+      for (const {attendee} of attempt.entries) appendGuest(attendee);
+      clearConsent();
+      showForm();
+      errorNote.textContent = '上次提交的结果待确认，请核对资料、勾选授权后重试。';
+      errorNote.hidden = false;
+      return true;
+    } catch { remember(key, ''); return false; }
   }
 
-  if (batchMode) openBatch();
-  else if (token) { showStatus('正在查询进度', '请稍候。'); checkStatus(); }
-  else showForm();
+  if (!batchMode && token) {
+    showStatus('正在查询进度', '请稍候。');
+    checkStatus().then(() => {
+      if (state === 'available') restoreSavedSubmission(singleAttemptKey, 'single');
+    });
+  } else if (!(restoreSavedSubmission(batchKey, 'batch') || (!batchMode && restoreSavedSubmission(singleAttemptKey, 'single')))) {
+    showForm();
+  }
 })();
