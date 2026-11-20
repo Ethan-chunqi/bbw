@@ -122,6 +122,20 @@ body:has(#history-open[hidden]) #history-hint { display: none; }
 #order { overflow-wrap: anywhere; }
 #order-id { font-family: "IBM Plex Mono", ui-monospace, monospace; }
 #status-update:empty { display: none; }
+#verification-panel { margin-top: 20px; padding: 18px; border: 1px solid #e2c8b9; border-radius: 10px; background: #fff9f5; }
+#verification-panel h3 { margin: 0; font-size: 1.08rem; }
+#verification-guide { margin: 10px 0 14px; }
+#verification-link { display: inline-flex; align-items: center; min-height: 44px; padding: 6px 13px; border-radius: 7px; background: var(--ink); color: #fff; font-weight: 650; }
+#verification-report { display: grid; gap: 6px; margin-top: 17px; padding-top: 15px; border-top: 1px solid var(--line); }
+#verification-report label { font-size: .94rem; font-weight: 600; }
+#verification-report .secondary { justify-self: start; margin-top: 5px; }
+#verification-extra summary { cursor: pointer; font-size: .9rem; color: var(--muted); }
+#verification-extra label { display: block; margin: 10px 0 4px; }
+#verification-report-hint:empty { display: none; }
+#verification-note:empty { display: none; }
+#registration.batch-complete > :not(#submission-notice) { display: none; }
+.batch-progress-links { margin: 12px 0; padding-left: 1.3em; }
+.batch-progress-links li { padding-block: 4px; overflow-wrap: anywhere; }
 .notice { padding: 16px; background: white; }
 @media (max-width: 900px) {
   .masthead-inner { min-height: 66px; padding: 0 26px; }

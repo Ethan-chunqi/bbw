@@ -9,8 +9,8 @@
   <meta name="theme-color" content="#0d0e0f">
   <title>UXUY VIP 嘉宾赠票 · 2026 曼谷币安区块链周</title>
   <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg%20width%3D%221024%22%20height%3D%221024%22%20viewBox%3D%220%200%201024%201024%22%20fill%3D%22none%22%20xmlns%3D%22http%3A%2F%2Fwww.w3.org%2F2000%2Fsvg%22%3E%0A%3Crect%20width%3D%221024%22%20height%3D%221024%22%20fill%3D%22black%22%2F%3E%0A%3Cpath%20d%3D%22M362.3%20226.976L175%20226.976L417%20514.244L175.141%20802H363.229L604.607%20514.31L362.3%20226.976Z%22%20fill%3D%22%23FE4200%22%2F%3E%0A%3Cpath%20d%3D%22M622.502%20535.553L847.304%20801.768L659.216%20801.768L528.65%20646.779L622.502%20535.553Z%22%20fill%3D%22%23FE4200%22%2F%3E%0A%3Cpath%20d%3D%22M622.568%20492.99L528.533%20381.547L709.7%20166H897L622.568%20492.99Z%22%20fill%3D%22%23FE4200%22%2F%3E%0A%3C%2Fsvg%3E">
-  <link rel="stylesheet" href="./styles.css?v=history-20261120">
-  <script defer src="./app.js?v=history-20261120"></script>
+  <link rel="stylesheet" href="./styles.css?v=access-20261120">
+  <script defer src="./app.js?v=access-20261120"></script>
 </head>
 <body>
   <header class="masthead">
@@ -41,7 +41,7 @@
           <h1 id="event-title"><span lang="en">UXUY VIP</span><br> 嘉宾赠票</h1>
           <svg class="ticket-mark" viewBox="150 145 765 680" fill="none" aria-hidden="true" focusable="false" xmlns="http://www.w3.org/2000/svg"><path d="M362.3 226.976L175 226.976L417 514.244L175.141 802H363.229L604.607 514.31L362.3 226.976Z" fill="#FE4200"/><path d="M622.502 535.553L847.304 801.768L659.216 801.768L528.65 646.779L622.502 535.553Z" fill="#FE4200"/><path d="M622.568 492.99L528.533 381.547L709.7 166H897L622.568 492.99Z" fill="#FE4200"/></svg>
         </div>
-        <p class="event-intro">欢迎成为 UXUY VIP 嘉宾。提交资料并通过审核后，UXUY 将代你办理本次活动的报名和领票。</p>
+        <p class="event-intro">使用 UXUY 发给你的六位报名码提交资料，即可进入报名和领票队列。每个码限一位嘉宾使用一次。</p>
       </div>
       <div class="ticket-stub">
         <dl class="event-details">
@@ -79,10 +79,27 @@
           <div class="progress-label"><label for="progress-bar">办理进度</label><span id="progress-percent" aria-hidden="true">0%</span></div>
           <progress id="progress-bar" max="3" value="0" aria-valuetext="尚未提交申请">0%</progress>
           <ol id="progress-steps" class="progress-steps">
-            <li>提交申请</li><li>后台审核</li><li>发放门票</li>
+            <li>提交申请</li><li>办理报名</li><li>发放门票</li>
           </ol>
         </section>
 
+        <section id="verification-panel" aria-labelledby="verification-heading" hidden>
+          <h3 id="verification-heading">验证报名邮箱</h3>
+          <p id="verification-time"></p>
+          <p id="verification-guide">点「去验证邮箱」获取验证码，再到报名邮箱查收。在官方验证页输入邮件中的 6 位验证码，完成后回这里点「我已完成验证」。</p>
+          <a id="verification-link" target="_blank" rel="noopener noreferrer" referrerpolicy="no-referrer" hidden>去验证邮箱 ↗</a>
+          <form id="verification-report" hidden>
+            <details id="verification-extra">
+              <summary id="verification-extra-label">帮助与订单号（选填）</summary>
+              <p class="hint">没收到验证码？请查看垃圾邮件。如官方页面要求付款或需要协助，请联系发给你报名码的工作人员。</p>
+              <label for="verification-order">官方订单号（如已有）</label>
+              <input id="verification-order" autocomplete="off" spellcheck="false" maxlength="36" placeholder="从官方确认页或邮件复制">
+              <p class="hint" id="verification-report-hint"></p>
+            </details>
+            <button class="secondary" type="submit" id="verification-send">我已完成验证</button>
+          </form>
+          <p id="verification-note" role="status"></p>
+        </section>
         <p id="order" hidden>订单号 <span id="order-id"></span></p>
         <div id="status-link-row" hidden>
           <button type="button" class="secondary" id="copy-link">复制我的进度链接</button>
@@ -91,6 +108,7 @@
         </div>
         <button type="button" class="secondary" id="refresh" hidden>刷新进度</button>
         <p id="status-update" class="hint" role="status"></p>
+        <p id="new-guest-row" hidden><a id="new-guest" href="./">继续填写其他嘉宾</a></p>
       </section>
       <form id="registration" method="post">
         <p id="submission-notice" role="status" tabindex="-1" hidden></p>
@@ -106,6 +124,9 @@
               <button type="button" class="remove-guest" hidden>移除</button>
             </div>
             <div class="fields-grid">
+              <label class="full-width">报名码
+                <input name="accessCode" type="text" inputmode="numeric" pattern="[0-9]{6}" maxlength="6" minlength="6" autocomplete="off" spellcheck="false" placeholder="UXUY 提供的六位数字" title="请输入 UXUY 提供的六位数字报名码" required>
+              </label>
               <label>姓（英文或拼音）
                 <input name="lastName" autocomplete="section-guest1 family-name" spellcheck="false" placeholder="例如 Wang" maxlength="200" required>
               </label>
@@ -132,7 +153,7 @@
           </label>
           <label class="consent-row">
             <input type="checkbox" name="consentData" required>
-            <span>我同意 UXUY 保存我的申请资料，审核通过后代我向 BBW 和 Moongate 提交报名并办理领票。我知悉币安按<a href="https://www.binance.com/en/privacy" target="_blank" rel="noopener noreferrer">隐私声明</a>处理活动资料并发送活动通知和会后调查。我已阅读并同意 Moongate 的<a href="https://themoongate.notion.site/Moongate-Terms-of-Sale-00f0e9cce59b4eedb1389b059b2ce988" target="_blank" rel="noopener noreferrer">售票条款</a>及<a href="https://themoongate.notion.site/Moongate-Privacy-f4f35ff31d98430680b5453441dc3d18" target="_blank" rel="noopener noreferrer">隐私政策</a>，授权 UXUY 代我确认这些必选项。</span>
+            <span>我同意 UXUY 保存我的申请资料，代我向 BBW 和 Moongate 提交报名并办理领票。我知悉币安按<a href="https://www.binance.com/en/privacy" target="_blank" rel="noopener noreferrer">隐私声明</a>处理活动资料并发送活动通知和会后调查。我已阅读并同意 Moongate 的<a href="https://themoongate.notion.site/Moongate-Terms-of-Sale-00f0e9cce59b4eedb1389b059b2ce988" target="_blank" rel="noopener noreferrer">售票条款</a>及<a href="https://themoongate.notion.site/Moongate-Privacy-f4f35ff31d98430680b5453441dc3d18" target="_blank" rel="noopener noreferrer">隐私政策</a>，授权 UXUY 代我确认这些必选项。</span>
           </label>
         </fieldset>
 
@@ -149,8 +170,8 @@
         </fieldset>
         <div class="form-bottom">
           <p id="form-error" role="alert" class="form-error" hidden></p>
-          <button type="submit" id="submit" class="primary" disabled>提交申请</button>
-          <p class="hint" id="history-hint">提交后可在右上角「查看进度」查询审核和领票状态。</p>
+          <button type="submit" id="submit" class="primary" disabled>下一步</button>
+          <p class="hint" id="history-hint">提交后可在右上角「查看进度」查看邮箱验证和领票进度。</p>
         </div>
       </form>
     </section>

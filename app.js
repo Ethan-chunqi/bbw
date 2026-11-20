@@ -4,10 +4,10 @@
   const get = id => document.getElementById(id);
   const form = get('registration');
   const progress = get('application-progress');
-  if (!progress || !form.elements.firstName || !form.elements.lastName || !get('history-open')) {
+  if (!progress || !form.elements.firstName || !form.elements.lastName || !form.elements.accessCode || !get('verification-panel')) {
     const fresh = new URL(location.href);
-    if (fresh.searchParams.get('form') !== 'history-20261120') {
-      fresh.searchParams.set('form', 'history-20261120');
+    if (fresh.searchParams.get('form') !== 'access-20261120') {
+      fresh.searchParams.set('form', 'access-20261120');
       location.replace(fresh.href);
     } else {
       get('form-error').textContent = '页面版本尚未更新，请稍后刷新本页。';
@@ -49,6 +49,7 @@
   const historyRecords = new Map();
   const statusCache = new Map();
   const statusElements = new Map();
+  const historyDetailLinks = new Map();
   const fields = ['lastName', 'firstName', 'email', 'badgeName'];
   let attempt = null;
   let historyRun = 0;
@@ -58,8 +59,8 @@
     pending: ['申请已提交，等待审核', 'UXUY 收到了你的申请。审核通过后，UXUY 将代你办理活动报名和领票。'],
     declined: ['申请未通过', '如需了解具体情况，请联系发出邀请的 UXUY 工作人员。'],
     approved: ['审核已通过', 'UXUY 已通过你的申请，接下来将办理报名和领票。'],
-    queued: ['审核已通过', '你的报名资料已进入领票办理队列。'],
-    processing: ['正在办理领票', 'UXUY 正在为你办理活动报名和领票。'],
+    queued: ['正在等待办理报名', '报名码已使用，资料已进入办理队列。请保留本页，邮箱验证入口就绪后会显示在这里。'],
+    processing: ['正在办理报名和领票', '请保留本页。需要验证报名邮箱时，页面会提示你。'],
     review: ['等待人工核对', '办理过程中需要 UXUY 核对资料，请稍后查看进度。'],
     issued: ['已完成领票', '请查看你填写的报名邮箱，留意活动方的确认邮件。入场二维码可能临近活动时另行发送。'],
     closed: ['邀请已关闭', '如需了解具体情况，请联系发出邀请的 UXUY 工作人员。']
@@ -72,6 +73,10 @@
   let busy = false;
   let timer;
   let requestId = read(requestKey);
+  let verification = null;
+  let expiryTimer;
+  let reporting = false;
+  let statusVersion = 0;
 
 
   function read(key) {
@@ -119,6 +124,7 @@
         error.status = response.status;
         const problem = await response.json().catch(() => ({}));
         error.row = problem.row;
+        error.code = problem.error || problem.code;
         throw error;
       }
       return await response.json();
@@ -154,6 +160,8 @@
     clearTimeout(timer);
     form.hidden = true;
     historyPanel.hidden = true;
+    get('verification-panel').hidden = true;
+    if (!personal) clearVerification();
     updateProgress(personal ? state : undefined);
     card.hidden = false;
     title.textContent = heading;
@@ -167,6 +175,7 @@
     get('manual-link').hidden = true;
     get('copy-result').textContent = '请保存此链接，仅供本人查看。';
     get('status-link-row').hidden = !(personal && token);
+    get('new-guest-row').hidden = !(personal && token);
     if (personal && token) {
       const privateUrl = new URL(location.pathname, location.origin);
       privateUrl.hash = new URLSearchParams({ invite: token });
@@ -183,6 +192,136 @@
     }
   }
 
+  function officialCheckout(value) {
+    const prefix = 'https://app.moongate.id/e/binance-blockchain-week-2026?';
+    if (typeof value !== 'string' || !value.startsWith(prefix)) return null;
+    const parts = value.slice(prefix.length).split('&');
+    if (parts.length !== 2 || !parts.includes('checkout=1') ||
+        !parts.some(p => /^c_confirmation=[A-Z0-9]{6,32}$/.test(p))) return null;
+    return value;
+  }
+
+  function expiredVerification(v) {
+    return v.expired === true || (Number.isFinite(v.deadline) && Date.now() >= v.deadline);
+  }
+
+  function historyStatus(result) {
+    const v = result?.verification;
+    if (result?.state !== 'review' || !v) return '';
+    if (v.hasOrderId) return '订单号已反馈，等待核对';
+    if (v.reportedAt) return '已反馈，等待核对';
+    if (expiredVerification(v)) return '个人验证已过期，待核对';
+    return officialCheckout(v.url) ? '请验证报名邮箱' : '正在等待邮箱验证链接';
+  }
+
+  function clearVerification() {
+    verification = null;
+    clearTimeout(expiryTimer);
+    get('verification-panel').hidden = true;
+    get('verification-link').removeAttribute('href');
+    get('verification-order').value = '';
+    get('verification-order').setCustomValidity('');
+    get('verification-extra').open = false;
+    get('verification-note').textContent = '';
+  }
+
+  function displayVerification(v) {
+    if (!v || typeof v !== 'object') { clearVerification(); return; }
+    verification = v;
+    clearTimeout(expiryTimer);
+    const expired = expiredVerification(v);
+    const url = officialCheckout(v.url);
+    const panel = get('verification-panel');
+    panel.hidden = false;
+    title.textContent = historyStatus({state:'review', verification:v});
+    description.textContent = v.reportedAt ? '已收到你的反馈，工作人员将继续核对领票结果。' : '活动报名资料已提交。';
+    const link = get('verification-link');
+    const canOpen = Boolean(url) && !expired && !v.reportedAt;
+    link.hidden = !canOpen;
+    if (canOpen) {
+      link.href = url;
+      link.textContent = '去验证邮箱 ↗';
+    }
+    else link.removeAttribute('href');
+    get('verification-guide').hidden = !canOpen || Boolean(v.reportedAt);
+    get('verification-heading').textContent = canOpen && !v.reportedAt ? '邮箱验证' : '验证状态';
+    const time = get('verification-time');
+    if (expired) {
+      time.textContent = '本次验证时限已过，请联系 UXUY 核对。';
+      if (url && !v.hasOrderId) time.textContent += '若你此前已操作，可以在此补交反馈或官方订单号。';
+      if (v.hasOrderId) time.textContent += 'UXUY 已收到你的订单号。';
+    } else if (!url) {
+      time.textContent = 'UXUY 正在核对这位嘉宾的专属验证入口。请稍后刷新本页，或联系 UXUY 工作人员。';
+    } else if (v.reportedAt) {
+      time.textContent = v.hasOrderId ? '官方订单号已收到。' : '你可以关闭本页，稍后查看领票进度。';
+    } else {
+      time.textContent = Number.isFinite(v.deadline)
+        ? '请在 ' + new Date(v.deadline).toLocaleString('zh-CN', {timeZone:'Asia/Bangkok', month:'long', day:'numeric', hour:'2-digit', minute:'2-digit', hour12:false}) + '（曼谷时间）前完成验证。'
+        : '请尽快用手机完成验证。页面暂未提供准确的截止时间。';
+    }
+    const report = get('verification-report');
+    report.hidden = !url || v.hasOrderId === true;
+    const field = get('verification-order');
+    field.required = Boolean(v.reportedAt);
+    field.disabled = reporting;
+    get('verification-extra-label').textContent = v.reportedAt ? '补交官方订单号（选填）' : '帮助与订单号（选填）';
+    get('verification-report-hint').textContent = v.reportedAt
+      ? '如已有官方订单号，可在此补交。' : '';
+    get('verification-send').disabled = reporting;
+    get('verification-send').hidden = Boolean(v.reportedAt) && !get('verification-extra').open;
+    get('verification-send').textContent = reporting ? '正在提交…' : v.reportedAt ? '补交订单号' : '我已完成验证';
+    if (v.hasOrderId) field.value = '';
+    if (!expired && Number.isFinite(v.deadline)) {
+      expiryTimer = setTimeout(() => displayVerification(v), Math.min(2147483647, Math.max(5, v.deadline - Date.now() + 1)));
+    }
+  }
+
+  get('verification-link').addEventListener('click', event => {
+    if (!verification || expiredVerification(verification)) {
+      event.preventDefault();
+      displayVerification(verification);
+    }
+  });
+
+  const reportForm = get('verification-report');
+  const orderInput = get('verification-order');
+  orderInput.addEventListener('invalid', () => { get('verification-extra').open = true; });
+  get('verification-extra').addEventListener('toggle', () => {
+    if (verification?.reportedAt) get('verification-send').hidden = !get('verification-extra').open;
+  });
+  orderInput.addEventListener('input', () => {
+    orderInput.setCustomValidity('');
+    get('verification-note').textContent = '';
+  });
+  reportForm.addEventListener('submit', async event => {
+    event.preventDefault();
+    if (reporting || !token || !verification || !officialCheckout(verification.url) || verification.hasOrderId) return;
+    const orderId = orderInput.value.trim();
+    if (orderId && !/^[0-9a-f]{8}(?:-[0-9a-f]{4}){3}-[0-9a-f]{12}$/i.test(orderId)) {
+      orderInput.setCustomValidity('请输入官方订单号，格式为包含四个短横线的 36 位编号。');
+    }
+    if (!reportForm.reportValidity()) return;
+    reporting = true;
+    statusVersion++;
+    displayVerification(verification);
+    const note = get('verification-note');
+    note.textContent = '';
+    try {
+      const result = await request('verification-report', {token, ...(orderId ? {orderId} : {})});
+      render(result);
+      if (result?.verification) note.textContent = '反馈已送达。';
+    } catch (err) {
+      note.textContent = err.code === 'REPORT_CONFLICT' ? '此前已反馈另一订单号，请联系 UXUY 核对。'
+        : err.status === 409 ? '当前状态已更新，请刷新进度后查看。'
+        : err.status === 422 ? '请核对官方订单号后再提交。'
+        : '暂时无法确认反馈结果，请刷新进度后重试。';
+    } finally {
+      reporting = false;
+      if (verification) displayVerification(verification);
+      poll();
+    }
+  });
+
   function render(result) {
     if (result?.state === 'available') {
       showForm();
@@ -192,6 +331,7 @@
     if (!result || !Object.hasOwn(states, result.state)) throw new Error('Unknown state');
     state = result.state;
     showStatus(...states[state], activeStates.has(state), true);
+    displayVerification(state === 'review' ? result.verification : null);
     if (state === 'issued' && result.orderId) {
       get('order-id').textContent = String(result.orderId);
       get('order').hidden = false;
@@ -200,12 +340,15 @@
   }
 
   async function checkStatus() {
-    if (!token || busy) return;
+    if (!token || busy || reporting) return;
     busy = true;
     refresh.disabled = true;
+    const version = statusVersion;
     try {
-      render(await request('invitation', { token }));
+      const result = await request('invitation', { token });
+      if (version === statusVersion) render(result);
     } catch (error) {
+      if (version !== statusVersion) return;
       if ([401, 403, 404, 410].includes(error.status)) {
         state = 'closed';
         showStatus('链接不可用', '请重新打开保存的完整链接，或联系 UXUY 核对。');
@@ -302,6 +445,7 @@
   });
   function renderHistory() {
     statusElements.clear();
+    historyDetailLinks.clear();
     const records = [...historyRecords.values()].sort((a,b) => (b.submittedAt || 0) - (a.submittedAt || 0));
     const people = get('history-list');
     people.replaceChildren(...records.map(person => {
@@ -316,11 +460,13 @@
       const status = document.createElement('span');
       status.className = 'history-state';
       const lastState = statusCache.get(person.token)?.state || person.state;
-      status.textContent = states[lastState]?.[0] || '待查询';
+      status.textContent = historyStatus(statusCache.get(person.token)) || states[lastState]?.[0] || '待查询';
       statusElements.set(person.token, status);
       const actions = document.createElement('div');
       actions.className = 'history-actions';
       const link = historyLink(person.token, '查看详情');
+      historyDetailLinks.set(person.token, link);
+      if (statusCache.get(person.token)?.verification) link.textContent = '查看邮箱验证';
       const copy = document.createElement('button');
       copy.type = 'button';
       copy.textContent = '复制链接';
@@ -373,10 +519,12 @@
           const result = await request('invitation', {token:t});
           if (run !== historyRun) return;
           if (result?.state !== 'available' && !Object.hasOwn(states, result?.state)) throw new Error('Unknown state');
-          statusCache.set(t, {state:result.state, checkedAt:Date.now()});
+          statusCache.set(t, {state:result.state, verification:result.verification, checkedAt:Date.now()});
           if (t === oldToken) { previousState = result.state; showPreviousLink(); }
           const label = statusElements.get(t);
-          if (label) label.textContent = states[result.state]?.[0] || '待核对';
+          if (label) label.textContent = historyStatus(result) || states[result.state]?.[0] || '待核对';
+          const link = historyDetailLinks.get(t);
+          if (link) link.textContent = result.verification ? '查看邮箱验证' : '查看详情';
         } catch (err) {
           if (run !== historyRun) return;
           unavailable = true;
@@ -456,6 +604,10 @@
       hint.id = 'email-hint-' + n;
       guestInput(guest, 'email').setAttribute('aria-describedby', hint.id);
       for (const input of guest.querySelectorAll('input')) {
+        if (input.name === 'accessCode') {
+          input.readOnly = sending;
+          continue;
+        }
         input.readOnly = locked;
         const purpose = input.autocomplete.split(' ').pop();
         input.autocomplete = 'section-guest' + n + ' ' + purpose;
@@ -467,7 +619,7 @@
     const group = get('team-consents');
     group.hidden = !team; group.disabled = !team || sending;
     submit.disabled = sending;
-    submit.textContent = sending ? '正在提交…' : attempt ? '用原资料重试' : team ? '提交 ' + guests.length + ' 位嘉宾的申请' : '提交申请';
+    submit.textContent = sending ? '正在提交…' : attempt ? '用原资料重试' : guests.length > 1 ? '下一步（' + guests.length + ' 位嘉宾）' : '下一步';
   }
 
   function appendGuest(person) {
@@ -502,6 +654,11 @@
     guestInput(next, 'lastName').focus();
   });
   list.addEventListener('input', event => {
+    if (event.target.name === 'accessCode') {
+      for (const input of list.querySelectorAll('input[name="accessCode"]')) input.setCustomValidity('');
+      errorNote.hidden = true;
+      return;
+    }
     changedGuests();
     updateBadge(event.target.closest('.guest-card'));
   });
@@ -545,9 +702,18 @@
   }
 
   function showSuccess(entries, results, durable) {
-    notice.textContent = '提交成功！已提交 ' + results.length + ' 位嘉宾的申请。可继续填写下一位，或点右上角「查看进度」。';
+    notice.textContent = '已收到 ' + results.length + ' 位嘉宾的报名资料。请把下方对应的个人进度链接分别发给本人，以便在需要时用手机验证邮箱。';
     if (!durable) notice.textContent += '此浏览器暂时无法长期保存记录，请在关闭页面前复制进度链接。';
     if (results.length > 1) {
+      const people = document.createElement('ul');
+      people.className = 'batch-progress-links';
+      entries.forEach(({attendee}, index) => {
+        const row = document.createElement('li');
+        const name = attendee.firstName + ' ' + attendee.lastName;
+        row.append(name + ' · ', historyLink(results[index].token, '查看个人进度与验证步骤'));
+        people.append(row);
+      });
+      notice.append(people);
       const safeCell = value => /^[=+\-@＝＋－＠]/u.test(value.trimStart()) ? "'" + value : value;
       const content = entries.map(({attendee}, i) =>
         [attendee.firstName + ' ' + attendee.lastName, attendee.email, progressUrl(results[i].token)].map(safeCell).join('\t')
@@ -566,8 +732,17 @@
           feedback.textContent = '请点右上角「查看进度」，逐位复制对应链接。';
         }
       });
-      actions.append(copy, feedback);
+      const restart = document.createElement('button');
+      restart.type = 'button';
+      restart.textContent = '继续填写其他嘉宾';
+      restart.addEventListener('click', () => {
+        form.classList.remove('batch-complete');
+        notice.hidden = true;
+        guestInput(list.firstElementChild, 'accessCode').focus();
+      });
+      actions.append(copy, restart, feedback);
       notice.append(actions);
+      form.classList.add('batch-complete');
     }
     notice.hidden = false;
     notice.focus();
@@ -577,6 +752,15 @@
     event.preventDefault();
     if (busy || state !== 'available' || !form.reportValidity()) return;
     const kind = teamSubmission() ? 'batch' : 'single';
+    const codes = [...list.children].map(guest => guestInput(guest, 'accessCode').value);
+    for (const [index, code] of codes.entries()) {
+      if (!/^[0-9]{6}$/.test(code) || codes.indexOf(code) !== index) {
+        const input = guestInput(list.children[index], 'accessCode');
+        input.setCustomValidity('请为每位嘉宾填写各自的六位数字报名码，同行嘉宾需分别使用不同的码。');
+        input.reportValidity();
+        return;
+      }
+    }
     if (!attempt) {
       const entries = collectEntries();
       if (!entries) return;
@@ -592,11 +776,13 @@
     refreshGuests();
     try {
       let results;
+      // Attach the secrets only to this request. Entries are also used to persist retry drafts.
+      const outgoing = attempt.entries.map((entry, index) => ({...entry, accessCode:codes[index]}));
       if (kind === 'single') {
-        const receipt = await request('registration', {...attempt.entries[0], ...(privateView ? {token} : {})});
+        const receipt = await request('registration', {...outgoing[0], ...(privateView ? {token} : {})});
         results = [receipt];
       } else {
-        const data = await request('registrations/batch', {entries:attempt.entries});
+        const data = await request('registrations/batch', {entries:outgoing});
         results = data?.results;
       }
       if (!Array.isArray(results) || results.length !== attempt.entries.length ||
@@ -608,10 +794,14 @@
         return saveRecord({name:person.firstName + ' ' + person.lastName, token:r.token, state:r.state, submittedAt});
       }).every(Boolean);
       forgetAttempt(kind);
-      if (privateView) {
+      if (results.length === 1) {
         token = results[0].token;
-        history.replaceState(null, '', progressUrl(token));
         form.reset();
+        if (!privateView) {
+          location.assign(progressUrl(token));
+          return;
+        }
+        history.replaceState(null, '', progressUrl(token));
         render(results[0]);
         title.focus();
       } else {
@@ -633,8 +823,15 @@
         429:'提交过于频繁，请保留本页，稍后重试。'
       };
       if ([400,403,409,410,413,422].includes(err.status)) forgetAttempt(kind);
-      errorNote.textContent = messages[err.status] || '暂时无法确认提交结果，请用原资料重试。';
+      const codeMessages = {
+        ACCESS_CODE_UNAVAILABLE: prefix + '报名码无效或已使用，请核对六位数字，或联系发码的 UXUY 工作人员。',
+        CAPACITY_FULL: '本场赠票名额已满，请联系 UXUY 工作人员。'
+      };
+      errorNote.textContent = codeMessages[err.code] || messages[err.status] || '暂时无法确认提交结果，请用原资料和同一个报名码重试。';
       errorNote.hidden = false;
+      if (err.code === 'ACCESS_CODE_UNAVAILABLE') {
+        guestInput(list.children[(err.row || 1) - 1] || list.firstElementChild, 'accessCode').focus();
+      }
     } finally {
       sending = false; busy = false;
       if (!form.hidden) refreshGuests();
@@ -651,7 +848,7 @@
       for (const {attendee} of attempt.entries) appendGuest(attendee);
       clearConsent();
       showForm();
-      errorNote.textContent = '上次提交的结果待确认，请核对资料、勾选授权后重试。';
+      errorNote.textContent = '上次提交的结果待确认。请重新填写每位嘉宾原来的报名码，核对资料并勾选授权后重试。';
       errorNote.hidden = false;
       return true;
     } catch { remember(key, ''); return false; }
