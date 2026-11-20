@@ -4,10 +4,10 @@
   const get = id => document.getElementById(id);
   const form = get('registration');
   const progress = get('application-progress');
-  if (!progress || !form.elements.firstName || !form.elements.lastName || !get('add-guest')) {
+  if (!progress || !form.elements.firstName || !form.elements.lastName || !get('history-open')) {
     const fresh = new URL(location.href);
-    if (fresh.searchParams.get('form') !== 'guests-20261120') {
-      fresh.searchParams.set('form', 'guests-20261120');
+    if (fresh.searchParams.get('form') !== 'history-20261120') {
+      fresh.searchParams.set('form', 'history-20261120');
       location.replace(fresh.href);
     } else {
       get('form-error').textContent = '页面版本尚未更新，请稍后刷新本页。';
@@ -30,16 +30,30 @@
     ? new URL('https://dashayu.xyz/bbw/api/')
     : new URL('api/', base);
   const storageKey = 'bbw-guest-invite:' + base.pathname;
-  const requestKey = 'bbw-guest-request:' + base.pathname;
+  const publicRequestKey = 'bbw-guest-request:' + base.pathname;
   const batchKey = 'bbw-guest-batch:' + base.pathname;
+  const historyPrefix = 'bbw-guest-history:' + base.pathname + ':';
+  const fragment = new URLSearchParams(location.hash.slice(1));
+  const privateView = fragment.has('invite');
+  const batchMode = !privateView && new URL(location.href).searchParams.get('mode') === 'batch';
+  let token = privateView ? fragment.get('invite').trim() : '';
+  const oldToken = read(storageKey);
+  const requestKey = publicRequestKey + (privateView ? ':invite:' + token : ':public');
   const singleAttemptKey = requestKey + ':attempt';
   const list = get('guest-list');
   const guestTemplate = list.firstElementChild.cloneNode(true);
   const add = get('add-guest');
-  const receiptCard = get('batch-result');
+  const notice = get('submission-notice');
+  const historyOpen = get('history-open');
+  const historyPanel = get('history-panel');
+  const historyRecords = new Map();
+  const statusCache = new Map();
+  const statusElements = new Map();
   const fields = ['lastName', 'firstName', 'email', 'badgeName'];
   let attempt = null;
-  let receipts = [];
+  let historyRun = 0;
+  let previousState;
+  let sending = false;
   const states = {
     pending: ['申请已提交，等待审核', 'UXUY 收到了你的申请。审核通过后，UXUY 将代你办理活动报名和领票。'],
     declined: ['申请未通过', '如需了解具体情况，请联系发出邀请的 UXUY 工作人员。'],
@@ -58,7 +72,7 @@
   let busy = false;
   let timer;
   let requestId = read(requestKey);
-  let token = read(storageKey);
+
 
   function read(key) {
     try { return sessionStorage.getItem(key) || ''; } catch { return ''; }
@@ -71,24 +85,25 @@
     } catch { /* The page can use its in-memory copy. */ }
   }
 
-  function setToken(value) {
-    token = value;
-    remember(storageKey, value);
-  }
-
-  const fragment = new URLSearchParams(location.hash.slice(1));
-  const batchMode = !fragment.has('invite') && new URL(location.href).searchParams.get('mode') === 'batch';
-  if (fragment.has('invite')) {
-    const nextToken = fragment.get('invite').trim();
-    if (nextToken !== token) { requestId = ''; remember(requestKey, ''); remember(singleAttemptKey, ''); }
-    setToken(nextToken);
+  if (privateView) {
     const cleanUrl = new URL(location.href);
-    cleanUrl.hash = '';
     cleanUrl.searchParams.delete('mode');
     history.replaceState(null, '', cleanUrl.href);
   }
+  // Older single submissions used a shared session slot. Only migrate into the matching flow.
+  if ((!privateView && !oldToken && !batchMode) || (privateView && token && oldToken === token)) {
+    if (!read(singleAttemptKey) && read(publicRequestKey + ':attempt')) {
+      remember(singleAttemptKey, read(publicRequestKey + ':attempt'));
+      remember(publicRequestKey + ':attempt', '');
+    }
+    if (!requestId && read(publicRequestKey)) {
+      requestId = read(publicRequestKey);
+      remember(requestKey, requestId);
+      remember(publicRequestKey, '');
+    }
+  }
   window.addEventListener('hashchange', () => {
-    if (new URLSearchParams(location.hash.slice(1)).has('invite')) location.reload();
+    location.reload();
   });
 
   async function request(path, payload) {
@@ -138,7 +153,7 @@
   function showStatus(heading, detail, retry = false, personal = false) {
     clearTimeout(timer);
     form.hidden = true;
-    receiptCard.hidden = true;
+    historyPanel.hidden = true;
     updateProgress(personal ? state : undefined);
     card.hidden = false;
     title.textContent = heading;
@@ -169,7 +184,11 @@
   }
 
   function render(result) {
-    if (result?.state === 'available') { showForm(); return; }
+    if (result?.state === 'available') {
+      showForm();
+      restoreSavedSubmission(singleAttemptKey, 'single');
+      return;
+    }
     if (!result || !Object.hasOwn(states, result.state)) throw new Error('Unknown state');
     state = result.state;
     showStatus(...states[state], activeStates.has(state), true);
@@ -216,69 +235,188 @@
     else if (activeStates.has(state)) checkStatus();
   });
 
-  function personItem(person) {
-    const item = document.createElement('li');
-    const info = document.createElement('div');
-    const name = document.createElement('strong');
-    const email = document.createElement('span');
-    name.textContent = person.firstName + ' ' + person.lastName;
-    email.textContent = person.email;
-    info.append(name, email);
-    item.append(info);
-    return item;
+  function validToken(value) {
+    return typeof value === 'string' && /^[A-Za-z0-9_-]{43}$/.test(value);
   }
 
-  function progressUrl(person) {
+  function progressUrl(value) {
     const url = new URL(base);
-    url.hash = new URLSearchParams({invite:person.token});
+    url.hash = new URLSearchParams({invite:value});
     return url.href;
   }
 
-  function showReceipts() {
-    form.hidden = true;
-    receiptCard.hidden = false;
-    get('batch-result-title').textContent = receipts.length + ' 份嘉宾申请已提交';
-    get('result-rows').replaceChildren(...receipts.map(person => {
-      const item = personItem(person);
-      const link = document.createElement('a');
-      link.href = progressUrl(person);
-      link.target = '_blank';
-      link.rel = 'noopener noreferrer';
-      link.textContent = '查看进度';
+  function saveRecord(record) {
+    const key = historyPrefix + record.token;
+    const value = JSON.stringify(record);
+    historyRecords.set(record.token, record);
+    try { localStorage.setItem(key, value); return true; } catch {
+      remember(key, value);
+      return false;
+    }
+  }
+
+  function loadRecords() {
+    for (const storeName of ['sessionStorage', 'localStorage']) {
+      try {
+        const store = window[storeName];
+        for (let i = 0; i < store.length; i++) {
+          const key = store.key(i);
+          if (!key?.startsWith(historyPrefix)) continue;
+          try {
+            const item = JSON.parse(store.getItem(key));
+            if (validToken(item?.token) && key === historyPrefix + item.token && typeof item.name === 'string') {
+              historyRecords.set(item.token, item);
+            }
+          } catch { /* Skip malformed records individually. */ }
+        }
+      } catch { /* Entries accepted during this visit remain available in memory. */ }
+    }
+  }
+
+  function migrateBatchReceipts() {
+    try {
+      const saved = JSON.parse(read(batchKey) || '{}');
+      if (!Array.isArray(saved.receipts)) return;
+      loadRecords();
+      let durable = true;
+      for (const p of saved.receipts) {
+        if (!validToken(p?.token) || typeof p.firstName !== 'string' || typeof p.lastName !== 'string' || historyRecords.has(p.token)) continue;
+        const ok = saveRecord({token:p.token, name:(p.firstName + ' ' + p.lastName).trim(), submittedAt:null});
+        durable = durable && ok;
+      }
+      if (durable) remember(batchKey, '');
+    } catch { /* Keep any outstanding submission in its original slot. */ }
+  }
+
+  function historyLink(value, text) {
+    const link = document.createElement('a');
+    link.href = progressUrl(value);
+    link.target = '_blank';
+    link.rel = 'noopener noreferrer';
+    link.textContent = text;
+    return link;
+  }
+
+  const historyDate = new Intl.DateTimeFormat('zh-CN', {
+    year:'numeric', month:'2-digit', day:'2-digit', hour:'2-digit', minute:'2-digit', hour12:false
+  });
+  function renderHistory() {
+    statusElements.clear();
+    const records = [...historyRecords.values()].sort((a,b) => (b.submittedAt || 0) - (a.submittedAt || 0));
+    const people = get('history-list');
+    people.replaceChildren(...records.map(person => {
+      const row = document.createElement('li');
+      const name = document.createElement('strong');
+      name.className = 'history-person';
+      name.textContent = person.name;
+      const date = document.createElement('span');
+      date.className = 'history-date';
+      date.textContent = Number.isFinite(person.submittedAt) && person.submittedAt > 0
+        ? historyDate.format(person.submittedAt) : '早期记录 · 提交时间未保存';
+      const status = document.createElement('span');
+      status.className = 'history-state';
+      const lastState = statusCache.get(person.token)?.state || person.state;
+      status.textContent = states[lastState]?.[0] || '待查询';
+      statusElements.set(person.token, status);
+      const actions = document.createElement('div');
+      actions.className = 'history-actions';
+      const link = historyLink(person.token, '查看详情');
       const copy = document.createElement('button');
       copy.type = 'button';
-      copy.className = 'copy-person';
       copy.textContent = '复制链接';
       copy.addEventListener('click', async () => {
         try {
           await navigator.clipboard.writeText(link.href);
-          get('batch-copy-note').textContent = '已复制 ' + person.firstName + ' ' + person.lastName + ' 的进度链接。';
+          get('history-note').textContent = '已复制 ' + person.name + ' 的进度链接。';
         } catch {
-          get('batch-copy-note').textContent = '请长按或右键点击这位嘉宾的「查看进度」，选择复制链接。';
+          get('history-note').textContent = '请长按或右键点击这位嘉宾的「查看详情」，选择复制链接。';
           link.focus();
         }
       });
-      const actions = document.createElement('div');
-      actions.className = 'person-actions';
       actions.append(link, copy);
-      item.append(actions);
-      return item;
+      row.append(name, date, status, actions);
+      return row;
     }));
-    get('batch-result-title').focus();
+    get('history-empty').hidden = records.length > 0;
   }
 
-  get('copy-batch').addEventListener('click', async () => {
-    const spreadsheetCell = value => /^[=+\-@＝＋－＠]/u.test(value.trimStart()) ? "'" + value : value;
-    const content = receipts.map(p => [p.firstName + ' ' + p.lastName, p.email, progressUrl(p)].map(spreadsheetCell).join('\t')).join('\n');
-    try {
-      await navigator.clipboard.writeText(content);
-      get('batch-copy-note').textContent = '已复制全部姓名、邮箱和进度链接，可粘贴到内部表格。';
-    } catch {
-      get('batch-copy-note').textContent = '请逐人长按或右键点击「查看进度」，选择复制链接。';
-    }
-  });
-  let sending = false;
+  function showPreviousLink() {
+    get('history-previous')?.remove();
+    if (!validToken(oldToken) || historyRecords.has(oldToken)) return;
+    const unfinished = previousState === 'available' && read(publicRequestKey + ':attempt');
+    if (!unfinished && !Object.hasOwn(states, previousState)) return;
+    const link = historyLink(oldToken, unfinished ? '继续上次未完成的个人邀请' : '上次在此标签页查看的个人进度');
+    if (unfinished) link.target = '_self';
+    link.id = 'history-previous';
+    get('history-list').after(link);
+  }
 
+  async function refreshHistory(force = false) {
+    const run = ++historyRun;
+    const button = get('history-refresh');
+    button.disabled = true;
+    loadRecords();
+    renderHistory();
+    showPreviousLink();
+    const tokens = [...statusElements.keys()];
+    if (validToken(oldToken) && !historyRecords.has(oldToken)) tokens.push(oldToken);
+    const needsQuery = tokens.filter(t => force || Date.now() - (statusCache.get(t)?.checkedAt || 0) >= 30000);
+    const note = get('history-note');
+    note.textContent = needsQuery.length ? '正在查询最新进度…' : '';
+    let next = 0;
+    let unavailable = false;
+    let stop = false;
+    async function queryNext() {
+      while (run === historyRun && !stop && next < needsQuery.length) {
+        const t = needsQuery[next++];
+        try {
+          const result = await request('invitation', {token:t});
+          if (run !== historyRun) return;
+          if (result?.state !== 'available' && !Object.hasOwn(states, result?.state)) throw new Error('Unknown state');
+          statusCache.set(t, {state:result.state, checkedAt:Date.now()});
+          if (t === oldToken) { previousState = result.state; showPreviousLink(); }
+          const label = statusElements.get(t);
+          if (label) label.textContent = states[result.state]?.[0] || '待核对';
+        } catch (err) {
+          if (run !== historyRun) return;
+          unavailable = true;
+          const label = statusElements.get(t);
+          if (label && [404,410].includes(err.status)) label.textContent = '进度链接不可用';
+          else if (!err.status || err.status === 429 || err.status >= 500) stop = true;
+        }
+      }
+    }
+    await Promise.all([queryNext(), queryNext(), queryNext()]);
+    if (run === historyRun) {
+      button.disabled = false;
+      note.textContent = unavailable ? '部分进度暂时无法更新，可点击「刷新进度」重试。' : '';
+    }
+  }
+
+  historyOpen.addEventListener('click', () => {
+    if (privateView || sending || !historyPanel.hidden) return;
+    form.hidden = true;
+    historyPanel.hidden = false;
+    historyOpen.setAttribute('aria-expanded', 'true');
+    get('history-title').focus();
+    refreshHistory();
+  });
+  get('history-back').addEventListener('click', () => {
+    historyRun++;
+    historyPanel.hidden = true;
+    historyOpen.setAttribute('aria-expanded', 'false');
+    form.hidden = false;
+    historyOpen.focus();
+  });
+  get('history-refresh').addEventListener('click', () => refreshHistory(true));
+  let historyStorageTimer;
+  window.addEventListener('storage', event => {
+    if (!event.key?.startsWith(historyPrefix) || historyPanel.hidden || privateView) return;
+    clearTimeout(historyStorageTimer);
+    historyStorageTimer = setTimeout(() => {
+      if (!historyPanel.hidden) refreshHistory();
+    }, 100);
+  });
   function guestInput(guest, name) {
     return guest.querySelector('input[name="' + name + '"]');
   }
@@ -300,7 +438,8 @@
     const guests = [...list.children];
     const locked = sending || Boolean(attempt);
     const team = teamSubmission();
-    add.hidden = !batchMode && Boolean(token);
+    add.hidden = privateView;
+    historyOpen.disabled = sending;
     add.disabled = locked || guests.length >= 60;
     add.lastChild.textContent = guests.length >= 60 ? ' 已达到每次 60 位上限' : ' 添加一位嘉宾';
     for (const [i, guest] of guests.entries()) {
@@ -345,7 +484,7 @@
   }
 
   add.addEventListener('click', () => {
-    if (sending || attempt || (!batchMode && token) || list.children.length >= 60) return;
+    if (sending || attempt || privateView || list.children.length >= 60) return;
     const guest = appendGuest();
     changedGuests();
     refreshGuests();
@@ -405,6 +544,35 @@
     attempt = null;
   }
 
+  function showSuccess(entries, results, durable) {
+    notice.textContent = '提交成功！已提交 ' + results.length + ' 位嘉宾的申请。可继续填写下一位，或点右上角「查看进度」。';
+    if (!durable) notice.textContent += '此浏览器暂时无法长期保存记录，请在关闭页面前复制进度链接。';
+    if (results.length > 1) {
+      const safeCell = value => /^[=+\-@＝＋－＠]/u.test(value.trimStart()) ? "'" + value : value;
+      const content = entries.map(({attendee}, i) =>
+        [attendee.firstName + ' ' + attendee.lastName, attendee.email, progressUrl(results[i].token)].map(safeCell).join('\t')
+      ).join('\n');
+      const actions = document.createElement('span');
+      actions.className = 'history-actions';
+      const copy = document.createElement('button');
+      copy.type = 'button';
+      copy.textContent = '复制本次进度链接';
+      const feedback = document.createElement('span');
+      copy.addEventListener('click', async () => {
+        try {
+          await navigator.clipboard.writeText(content);
+          feedback.textContent = '已复制本次名单和进度链接。';
+        } catch {
+          feedback.textContent = '请点右上角「查看进度」，逐位复制对应链接。';
+        }
+      });
+      actions.append(copy, feedback);
+      notice.append(actions);
+    }
+    notice.hidden = false;
+    notice.focus();
+  }
+
   form.addEventListener('submit', async event => {
     event.preventDefault();
     if (busy || state !== 'available' || !form.reportValidity()) return;
@@ -423,23 +591,37 @@
     errorNote.hidden = true;
     refreshGuests();
     try {
+      let results;
       if (kind === 'single') {
-        const receipt = await request('registration', {...attempt.entries[0], ...(token ? {token} : {})});
-        if (!receipt || !Object.hasOwn(states, receipt.state)) throw new Error('Unconfirmed');
-        if (typeof receipt.token === 'string' && receipt.token) setToken(receipt.token);
-        if (!token) throw new Error('Missing receipt');
-        forgetAttempt(kind);
-        form.reset();
-        render(receipt);
-        title.focus();
+        const receipt = await request('registration', {...attempt.entries[0], ...(privateView ? {token} : {})});
+        results = [receipt];
       } else {
         const data = await request('registrations/batch', {entries:attempt.entries});
-        if (data?.results?.length !== attempt.entries.length || !data.results.every(r => r && typeof r.token === 'string' && r.token && Object.hasOwn(states, r.state))) throw new Error('Unconfirmed');
-        receipts = attempt.entries.map(({attendee:{firstName,lastName,email}}, i) => ({firstName,lastName,email,token:data.results[i].token}));
-        attempt = null;
-        remember(batchKey, JSON.stringify({receipts, origin:batchMode ? 'team' : 'root'}));
+        results = data?.results;
+      }
+      if (!Array.isArray(results) || results.length !== attempt.entries.length ||
+          !results.every(r => r && validToken(r.token) && Object.hasOwn(states, r.state))) throw new Error('Unconfirmed');
+      const submittedAt = Date.now();
+      const entries = attempt.entries;
+      const durable = results.map((r, i) => {
+        const person = entries[i].attendee;
+        return saveRecord({name:person.firstName + ' ' + person.lastName, token:r.token, state:r.state, submittedAt});
+      }).every(Boolean);
+      forgetAttempt(kind);
+      if (privateView) {
+        token = results[0].token;
+        history.replaceState(null, '', progressUrl(token));
         form.reset();
-        showReceipts();
+        render(results[0]);
+        title.focus();
+      } else {
+        list.replaceChildren();
+        appendGuest();
+        form.reset();
+        clearConsent();
+        errorNote.hidden = true;
+        showForm();
+        showSuccess(entries, results, durable);
       }
     } catch (err) {
       const prefix = Number.isInteger(err.row) ? '嘉宾 ' + err.row + '：' : '';
@@ -459,29 +641,10 @@
     }
   });
 
-  get('batch-next').addEventListener('click', () => {
-    remember(batchKey, '');
-    receipts = [];
-    receiptCard.hidden = true;
-    get('result-rows').replaceChildren();
-    get('batch-copy-note').textContent = '';
-    list.replaceChildren();
-    const guest = appendGuest();
-    clearConsent();
-    errorNote.hidden = true;
-    showForm();
-    guestInput(guest, 'lastName').focus();
-  });
-
   function restoreSavedSubmission(key, defaultKind) {
     try {
       const saved = JSON.parse(read(key) || '{}');
       if (defaultKind === 'batch' && !batchMode && saved.origin !== 'root') return false;
-      if (saved.receipts?.length) {
-        receipts = saved.receipts;
-        showReceipts();
-        return true;
-      }
       if (!saved.attempt?.entries?.length) return false;
       attempt = {kind:defaultKind, entries:saved.attempt.entries};
       list.replaceChildren();
@@ -494,12 +657,16 @@
     } catch { remember(key, ''); return false; }
   }
 
-  if (!batchMode && token) {
-    showStatus('正在查询进度', '请稍候。');
-    checkStatus().then(() => {
-      if (state === 'available') restoreSavedSubmission(singleAttemptKey, 'single');
-    });
-  } else if (!(restoreSavedSubmission(batchKey, 'batch') || (!batchMode && restoreSavedSubmission(singleAttemptKey, 'single')))) {
-    showForm();
+  if (privateView) {
+    if (validToken(token)) {
+      showStatus('正在查询进度', '请稍候。');
+      checkStatus();
+    } else {
+      showStatus('链接不可用', '请重新打开保存的完整进度链接。');
+    }
+  } else {
+    historyOpen.hidden = false;
+    migrateBatchReceipts();
+    if (!(restoreSavedSubmission(batchKey, 'batch') || (!batchMode && restoreSavedSubmission(singleAttemptKey, 'single')))) showForm();
   }
 })();
